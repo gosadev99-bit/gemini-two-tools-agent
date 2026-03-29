@@ -20,11 +20,11 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // ── MIDDLEWARE ─────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: [
-    'http://localhost:3000',           // React dev
-    'https://gossaye-ai-agent.netlify.app'  // React production
-  ]
+  origin: '*',
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+app.options('*', cors());
 app.use(express.json());
 
 // ── MEMORY ─────────────────────────────────────────────────────────────────
