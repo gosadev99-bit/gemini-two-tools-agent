@@ -33,6 +33,7 @@ cp .env.example .env
 
 Fill in your keys:
 GEMINI_API_KEY=your_gemini_api_key
+
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 
 ### 4. Run the agent (terminal only)
