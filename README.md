@@ -32,6 +32,7 @@ npm install
 cp .env.example .env
 
 Fill in your keys:
+
 GEMINI_API_KEY=your_gemini_api_key
 
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
@@ -76,4 +77,4 @@ Final answer delivered
 Deploy to VPS (Ubuntu + PM2 + Nginx)
 ## 👨‍💻 Author
 
-Gossaye Bireda — Front End Developer learning AI Agent Engineering
+Gossaye Bireda — Front End Developer/AI Agent Engineer. 
