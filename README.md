@@ -2,6 +2,7 @@
 
 A conversational AI agent built with Google Gemini that intelligently 
 decides which tool to use based on your question.
+ Live demo: https://api.gosanotary.tech
 
 ## 🚀 Features
 
@@ -21,7 +22,7 @@ decides which tool to use based on your question.
 ## ⚙️ Setup
 
 ### 1. Clone the repo
-git clone https://github.com/YOUR_USERNAME/gemini-two-tools-agent.git
+git clone https://github.com/gosadev99-bit/gemini-two-tools-agent.git
 cd gemini-two-tools-agent
 
 ### 2. Install dependencies
@@ -69,14 +70,9 @@ Final answer delivered
 > You: Add that tip to $200, what is the total?
 > Bot: The total is $221.60.
 
-## 📚 What I Learned
+## Deployment
 
-- How the agent loop works (Think → Act → Observe → Respond)
-- Tool use / function calling with Gemini API
-- Building a Telegram bot with Node.js
-- Managing conversation memory per user
-- Handling API rate limits gracefully
-
+Deploy to VPS (Ubuntu + PM2 + Nginx)
 ## 👨‍💻 Author
 
 Gossaye Bireda — Front End Developer learning AI Agent Engineering
