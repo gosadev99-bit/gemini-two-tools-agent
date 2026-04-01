@@ -2,6 +2,7 @@
 
 A conversational AI agent built with Google Gemini that intelligently 
 decides which tool to use based on your question.
+
  Live demo: https://api.gosanotary.tech
 
 ## 🚀 Features
@@ -46,15 +47,20 @@ node bot.js
 ## 🧠 How It Works
 ```
 User message
-     ↓
+
+ ↓
 Gemini reads the question
-     ↓
+
+ ↓
 Gemini decides: calculator or search?
-     ↓
+
+ ↓
 Tool runs locally on your machine
-     ↓
+
+ ↓
 Result sent back to Gemini
-     ↓
+
+ ↓
 Final answer delivered
 ```
 
@@ -62,19 +68,23 @@ Final answer delivered
 
 **Math:**
 > You: What is 18% tip on $120?
+> 
 > Bot: An 18% tip on $120 is $21.60.
 
 **Search:**
 > You: Who founded Google?
+> 
 > Bot: Larry Page and Sergey Brin founded Google.
 
 **Memory:**
 > You: Add that tip to $200, what is the total?
+> 
 > Bot: The total is $221.60.
 
 ## Deployment
 
 Deploy to VPS (Ubuntu + PM2 + Nginx)
+
 ## 👨‍💻 Author
 
-Gossaye Bireda — Front End Developer/AI Agent Engineer. 
+Gossaye Bireda — Full stack Developer/AI Agent Engineer. 
