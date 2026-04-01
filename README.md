@@ -23,7 +23,7 @@ decides which tool to use based on your question.
 
 ### 1. Clone the repo
 git clone https://github.com/gosadev99-bit/gemini-two-tools-agent.git
-cd gemini-two-tools-agent
+
 
 ### 2. Install dependencies
 npm install
