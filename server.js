@@ -1,4 +1,5 @@
  require('dotenv').config();
+const twilio = require('twilio');
 const express = require('express');
 const fs = require('fs');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -278,6 +279,127 @@ app.post('/api/chat', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// ── STREAMING CHAT ENDPOINT ───────────────────────────────────────────────
+app.post('/api/chat/stream', async (req, res) => {
+  const { message, sessionId = 'react-ui' } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+
+  console.log(`\n💬 [STREAM] [${sessionId}] User: ${message}`);
+
+  // Set headers for Server-Sent Events (SSE)
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+
+  try {
+    if (!chatHistories[sessionId]) chatHistories[sessionId] = [];
+    const history = chatHistories[sessionId];
+
+    // Load profile for RAG
+    const profile = loadProfile();
+    const profileContext = Object.keys(profile).length
+      ? `\n\nKNOWN USER FACTS:\n${Object.entries(profile)
+          .filter(([, v]) => v)
+          .map(([k, v]) => `- ${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+          .join('\n')}`
+      : '';
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      tools,
+      systemInstruction: `You are a helpful AI assistant with three tools:
+1. search_web — facts, news, general knowledge
+2. calculate — any math or number problems
+3. github_pr — GitHub Pull Request actions (create, list, review)
+Always use the right tool. Be concise and friendly.${profileContext}`
+    });
+
+    const cleanHistory = history.filter(msg =>
+      (msg.role === 'user' || msg.role === 'model') && msg.parts[0]?.text
+    );
+
+    const chat = model.startChat({ history: cleanHistory });
+
+    // Track token usage
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let fullAnswer = '';
+
+    // Handle tool calls first (non-streaming)
+    let response = await chat.sendMessage(message);
+    let candidate = response.response.candidates[0];
+    let content = candidate.content;
+
+    // Tool loop
+    while (content.parts.some(p => p.functionCall)) {
+      const toolCallPart = content.parts.find(p => p.functionCall);
+      const { name, args } = toolCallPart.functionCall;
+
+      // Send tool status to client
+      res.write(`data: ${JSON.stringify({ type: 'tool', tool: name })}\n\n`);
+
+      console.log(`🤖 Tool: "${name}"`);
+      const toolResult = await toolHandlers[name](args);
+
+      response = await chat.sendMessage([{ functionResponse: { name, response: toolResult } }]);
+      candidate = response.response.candidates[0];
+      content = candidate.content;
+    }
+
+    // Stream the final answer directly — no second Gemini call
+const finalText = response.response.text();
+fullAnswer = finalText;
+
+// Simulate streaming by sending words one by one
+const words = finalText.split(' ');
+for (const word of words) {
+  res.write(`data: ${JSON.stringify({ type: 'chunk', text: word + ' ' })}\n\n`);
+  await new Promise(r => setTimeout(r, 30)); // 30ms between words
+}
+
+    // Get usage metadata
+    const usage = response.response.usageMetadata;
+    inputTokens = usage?.promptTokenCount || 0;
+    outputTokens = usage?.candidatesTokenCount || 0;
+
+    // Calculate cost (Gemini 2.5 Flash pricing)
+    const inputCost  = (inputTokens  / 1000000) * 0.075;
+    const outputCost = (outputTokens / 1000000) * 0.30;
+    const totalCost  = inputCost + outputCost;
+
+    console.log(`📊 Tokens: ${inputTokens} in / ${outputTokens} out | Cost: $${totalCost.toFixed(6)}`);
+
+    // Send completion signal with cost data
+    res.write(`data: ${JSON.stringify({
+      type: 'done',
+      fullAnswer,
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        estimatedCost: `$${totalCost.toFixed(6)}`
+      }
+    })}\n\n`);
+
+    // Save to memory
+    history.push({ role: "user", parts: [{ text: message }] });
+    history.push({ role: "model", parts: [{ text: fullAnswer }] });
+    if (history.length > 20) chatHistories[sessionId] = history.slice(-20);
+    saveMemory(chatHistories);
+
+    res.end();
+
+  } catch (err) {
+    console.error('Stream error:', err.message);
+    res.write(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`);
+    res.end();
+  }
+});
 
 // Get user profile
 app.get('/api/profile', (req, res) => {
@@ -298,6 +420,121 @@ app.delete('/api/chat/:sessionId', (req, res) => {
   saveMemory(chatHistories);
   res.json({ success: true });
 });
+// ── LEAD RESEARCH ENDPOINT ─────────────────────────────────────────────────
+app.post('/api/leads/research', async (req, res) => {
+  const { company } = req.body;
+  if (!company) return res.status(400).json({ error: 'Company name required' });
+
+  console.log(`\n💼 Lead Research: "${company}"`);
+
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    async function searchWeb(query) {
+      try {
+        const r = await axios.get('https://api.duckduckgo.com/', {
+          params: { q: query, format: 'json', no_html: 1, skip_disambig: 1 }
+        });
+        return r.data.AbstractText || r.data.Answer ||
+               r.data.RelatedTopics?.[0]?.Text || `No result for: ${query}`;
+      } catch { return `Search failed for: ${query}`; }
+    }
+
+    async function ask(prompt) {
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    }
+
+    const [overview, news, tech, funding] = await Promise.all([
+      searchWeb(`${company} company SaaS startup overview`),
+      searchWeb(`${company} latest news 2025`),
+      searchWeb(`${company} tech stack technology`),
+      searchWeb(`${company} funding valuation investors`)
+    ]);
+
+    const summary = await ask(`
+      Summarize ${company} for a B2B sales rep in 3 paragraphs:
+      1. What they do and their market
+      2. Recent developments
+      3. Technology and infrastructure
+      Overview: ${overview} News: ${news} Tech: ${tech} Funding: ${funding}
+    `);
+
+    const score = await ask(`
+      Score ${company} as a B2B tech sales lead. Use EXACTLY this format:
+      SCORE: [1-10]
+      TIER: [HOT/WARM/COLD]
+      BUDGET_ESTIMATE: [range]
+      COMPANY_SIZE: [range]
+      PAIN_POINTS:
+      - [point 1]
+      - [point 2]
+      - [point 3]
+      OPPORTUNITY: [one sentence]
+      TIMING: [IMMEDIATE/3-6 MONTHS/6-12 MONTHS]
+      Research: ${summary}
+    `);
+
+    const email = await ask(`
+      Write a personalized cold outreach email to ${company}.
+      Research: ${summary} Score: ${score}
+      Rules: specific subject line, 3 short paragraphs, soft CTA for 15min call.
+      NO generic openers like "I hope this finds you well".
+      Format:
+      SUBJECT: [subject line]
+      
+      [email body]
+    `);
+
+    const report = {
+      company,
+      timestamp: new Date().toISOString(),
+      research: summary,
+      news, tech, funding, score, email
+    };
+
+    console.log(`✅ Lead research complete: ${company}`);
+    res.json({ success: true, report });
+
+  } catch (err) {
+    console.error('Lead research error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+// ── SMS NOTIFICATION ───────────────────────────────────────────────────────
+app.post('/api/notify/sms', async (req, res) => {
+  const { name, phone, email, service, message } = req.body;
+
+  console.log(`\n📱 SMS notification for: ${name}`);
+
+  try {
+    const client = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN
+    );
+
+    const smsBody = 
+      `🔔 New Booking!\n` +
+      `👤 ${name}\n` +
+      `📞 ${phone}\n` +
+      `✉️ ${email}\n` +
+      `📋 ${service}\n` +
+      `💬 ${message || 'No message'}`;
+
+    await client.messages.create({
+      body: smsBody,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: process.env.MY_PHONE_NUMBER
+    });
+
+    console.log('✅ SMS sent!');
+    res.json({ success: true });
+  } catch (err) {
+    console.error('SMS error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // ── START SERVER ───────────────────────────────────────────────────────────
 app.listen(PORT, () => {
