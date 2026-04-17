@@ -1,4 +1,6 @@
  require('dotenv').config();
+const { google } = require('googleapis');
+const nodemailer = require('nodemailer');
 const twilio = require('twilio');
 const express = require('express');
 const fs = require('fs');
@@ -440,10 +442,19 @@ app.post('/api/leads/research', async (req, res) => {
       } catch { return `Search failed for: ${query}`; }
     }
 
-    async function ask(prompt) {
+  async function ask(prompt) {
+  for (let i = 0; i < 3; i++) {
+    try {
       const result = await model.generateContent(prompt);
       return result.response.text();
+    } catch (err) {
+      if (i < 2) {
+        console.log(`⏳ Retrying in 10s... (${i+1}/3)`);
+        await new Promise(r => setTimeout(r, 10000));
+      } else throw err;
     }
+  }
+}
 
     const [overview, news, tech, funding] = await Promise.all([
       searchWeb(`${company} company SaaS startup overview`),
@@ -486,7 +497,7 @@ app.post('/api/leads/research', async (req, res) => {
       [email body]
     `);
 
-    const report = {
+     const report = {
       company,
       timestamp: new Date().toISOString(),
       research: summary,
@@ -494,6 +505,44 @@ app.post('/api/leads/research', async (req, res) => {
     };
 
     console.log(`✅ Lead research complete: ${company}`);
+
+    // ── AUTO-LOG TO GOOGLE SHEETS ─────────────────────────
+    try {
+      const scoreMatch  = score.match(/SCORE:\s*(\d+)/);
+      const tierMatch   = score.match(/TIER:\s*(\w+)/);
+      const budgetMatch = score.match(/BUDGET_ESTIMATE:\s*(.+)/);
+      const oppMatch    = score.match(/OPPORTUNITY:\s*(.+)/);
+      const subjMatch   = email.match(/SUBJECT:\s*(.+)/);
+
+      const auth = new google.auth.GoogleAuth({
+        keyFile: './google-credentials.json',
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+      });
+      const sheets = google.sheets({ version: 'v4', auth });
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: process.env.GOOGLE_SHEET_ID,
+        range: 'Sheet1!A:H',
+        valueInputOption: 'USER_ENTERED',
+        resource: {
+          values: [[
+            new Date().toLocaleString(),
+            company,
+            scoreMatch  ? scoreMatch[1]         : 'N/A',
+            tierMatch   ? tierMatch[1]           : 'N/A',
+            budgetMatch ? budgetMatch[1].trim()  : 'N/A',
+            oppMatch    ? oppMatch[1].trim()     : 'N/A',
+            subjMatch   ? subjMatch[1].trim()    : 'N/A',
+            summary.slice(0, 500),
+          ]],
+        },
+      });
+      console.log(`📊 Auto-logged to Sheets: ${company}`);
+    } catch (sheetErr) {
+      console.error('Auto-sheet log error:', sheetErr.message);
+    }
+    // ─────────────────────────────────────────────────────
+
     res.json({ success: true, report });
 
   } catch (err) {
@@ -534,7 +583,77 @@ app.post('/api/notify/sms', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// ── GOOGLE SHEETS LOGGER ──────────────────────────────────────────────────
+app.post('/api/leads/log-sheet', async (req, res) => {
+  const { company, score, tier, budgetEstimate, opportunity, emailSubject, research } = req.body;
 
+  console.log(`\n📊 Logging lead to Google Sheets: ${company}`);
+
+  try {
+    const auth = new google.auth.GoogleAuth({
+      keyFile: './google-credentials.json',
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Sheet1!A:H',
+      valueInputOption: 'USER_ENTERED',
+      resource: {
+        values: [[
+          new Date().toLocaleString(),
+          company,
+          score,
+          tier,
+          budgetEstimate || '',
+          opportunity || '',
+          emailSubject || '',
+          research ? research.slice(0, 500) : '',
+        ]],
+      },
+    });
+
+    console.log(`✅ Lead logged to Sheets: ${company}`);
+    res.json({ success: true, message: `${company} logged to Google Sheets` });
+
+  } catch (err) {
+    console.error('Sheets error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── EMAIL SENDER ──────────────────────────────────────────────────────────
+app.post('/api/leads/send-email', async (req, res) => {
+  const { to, subject, body, company } = req.body;
+
+  console.log(`\n📧 Sending email to ${to} for ${company}`);
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+    });
+
+    await transporter.sendMail({
+      from: `Gossaye Bireda <${process.env.GMAIL_USER}>`,
+      to,
+      subject,
+      text: body,
+    });
+
+    console.log(`✅ Email sent to ${to}`);
+    res.json({ success: true, message: `Email sent to ${to}` });
+
+  } catch (err) {
+    console.error('Email error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── START SERVER ───────────────────────────────────────────────────────────
 app.listen(PORT, () => {
