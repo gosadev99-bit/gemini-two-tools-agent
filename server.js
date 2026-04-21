@@ -1,4 +1,13 @@
  require('dotenv').config();
+const { Langfuse } = require('langfuse');
+
+const langfuse = new Langfuse({
+  secretKey:  'sk-lf-5c365e67-2a01-428e-8a98-0d75ce91d674',
+  publicKey:  'pk-lf-b9a492fe-1b74-4315-84b5-ea9ef19f73a9',
+  baseUrl:    'https://us.cloud.langfuse.com',
+});
+
+console.log('📊 Langfuse monitoring enabled');
 const { google } = require('googleapis');
 const nodemailer = require('nodemailer');
 const twilio = require('twilio');
@@ -20,7 +29,6 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// ── MIDDLEWARE ─────────────────────────────────────────────────────────────
 // ── MIDDLEWARE ─────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -199,12 +207,21 @@ async function github_pr({ action, title, head, base, body, pr_number }) {
 
 const toolHandlers = { search_web, calculate, github_pr };
 
+
 // ── AGENT RUNNER ───────────────────────────────────────────────────────────
 async function runAgent(sessionId, userMessage) {
+  // ── LANGFUSE TRACE ─────────────────────────────────────
+  const trace = langfuse.trace({
+    name: 'agent-chat',
+    userId: sessionId,
+    input: { message: userMessage },
+    metadata: { sessionId }
+  });
+  // ──────────────────────────────────────────────────────
+
   if (!chatHistories[sessionId]) chatHistories[sessionId] = [];
   const history = chatHistories[sessionId];
 
-  // Load user profile for RAG context
   const profile = loadProfile();
   const profileContext = Object.keys(profile).length
     ? `\n\nKNOWN USER FACTS:\n${Object.entries(profile)
@@ -223,12 +240,20 @@ async function runAgent(sessionId, userMessage) {
 Always use the right tool. Be concise and friendly.${profileContext}`
   });
 
-  // Clean history — only user and model text roles
   const cleanHistory = history.filter(msg =>
     (msg.role === 'user' || msg.role === 'model') && msg.parts[0]?.text
   );
 
   const chat = model.startChat({ history: cleanHistory });
+
+  // ── TRACE: LLM GENERATION ─────────────────────────────
+  const generation = trace.generation({
+    name: 'gemini-chat',
+    model: 'gemini-2.5-flash',
+    input: userMessage,
+  });
+  // ──────────────────────────────────────────────────────
+
   let response = await chat.sendMessage(userMessage);
   let candidate = response.response.candidates[0];
   let content = candidate.content;
@@ -236,17 +261,54 @@ Always use the right tool. Be concise and friendly.${profileContext}`
   while (content.parts.some(p => p.functionCall)) {
     const toolCallPart = content.parts.find(p => p.functionCall);
     const { name, args } = toolCallPart.functionCall;
+
+    // ── TRACE: TOOL CALL ────────────────────────────────
+    const toolSpan = trace.span({
+      name: `tool-${name}`,
+      input: args,
+    });
+    // ────────────────────────────────────────────────────
+
     console.log(`🤖 Tool: "${name}" args: ${JSON.stringify(args)}`);
     const toolResult = await toolHandlers[name](args);
+
+    // ── END TOOL SPAN ───────────────────────────────────
+    toolSpan.end({ output: toolResult });
+    // ────────────────────────────────────────────────────
+
     response = await chat.sendMessage([{ functionResponse: { name, response: toolResult } }]);
     candidate = response.response.candidates[0];
     content = candidate.content;
   }
 
   const finalAnswer = response.response.text();
+  const usage = response.response.usageMetadata;
 
-  // Save to memory
-  history.push({ role: "user", parts: [{ text: userMessage }] });
+  // ── END GENERATION + TRACE ─────────────────────────────
+  generation.end({
+    output: finalAnswer,
+    usage: {
+      input:  usage?.promptTokenCount     || 0,
+      output: usage?.candidatesTokenCount || 0,
+    }
+  });
+
+  trace.update({
+    output: { answer: finalAnswer },
+    metadata: {
+      inputTokens:  usage?.promptTokenCount     || 0,
+      outputTokens: usage?.candidatesTokenCount || 0,
+    }
+  });
+  // ──────────────────────────────────────────────────────
+
+  history.push({ role: "user",  parts: [{ text: userMessage }] });
+  history.push({ role: "model", parts: [{ text: finalAnswer }] });
+
+  if (history.length > 20) chatHistories[sessionId] = history.slice(-20);
+  saveMemory(chatHistories);
+
+  return finalAnswer;
   history.push({ role: "model", parts: [{ text: finalAnswer }] });
 
   if (history.length > 20) chatHistories[sessionId] = history.slice(-20);
@@ -344,7 +406,6 @@ Always use the right tool. Be concise and friendly.${profileContext}`
 
       // Send tool status to client
       res.write(`data: ${JSON.stringify({ type: 'tool', tool: name })}\n\n`);
-
       console.log(`🤖 Tool: "${name}"`);
       const toolResult = await toolHandlers[name](args);
 
@@ -442,7 +503,7 @@ app.post('/api/leads/research', async (req, res) => {
       } catch { return `Search failed for: ${query}`; }
     }
 
-  async function ask(prompt) {
+    async function ask(prompt) {
   for (let i = 0; i < 3; i++) {
     try {
       const result = await model.generateContent(prompt);
@@ -503,7 +564,22 @@ app.post('/api/leads/research', async (req, res) => {
       research: summary,
       news, tech, funding, score, email
     };
+     // ── LANGFUSE: TRACE LEAD RESEARCH ─────────────────────
+const leadTrace = langfuse.trace({
+  name: 'lead-research',
+  input: { company },
+  output: { score: score.slice(0, 200), email: email.slice(0, 200) },
+  metadata: { company, tier: score.match(/TIER:\s*(\w+)/)?.[1] || 'N/A' }
+});
+leadTrace.generation({
+  name: 'lead-summary',
+  model: 'gemini-2.5-flash',
+  input: company,
+  output: summary.slice(0, 500),
+});
+// ──────────────────────────────────────────────────────
 
+console.log(`✅ Lead research complete: ${company}`);
     console.log(`✅ Lead research complete: ${company}`);
 
     // ── AUTO-LOG TO GOOGLE SHEETS ─────────────────────────
@@ -654,7 +730,10 @@ app.post('/api/leads/send-email', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
+// Flush Langfuse traces every 10 seconds
+setInterval(() => {
+  langfuse.flushAsync().catch(() => {});
+}, 10000);
 // ── START SERVER ───────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🚀 Gossaye AI Agent API running on port ${PORT}`);
