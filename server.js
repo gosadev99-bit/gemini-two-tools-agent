@@ -2,8 +2,8 @@
 const { Langfuse } = require('langfuse');
 
 const langfuse = new Langfuse({
-  secretKey:  'sk-lf-5c365e67-2a01-428e-8a98-0d75ce91d674',
-  publicKey:  'pk-lf-b9a492fe-1b74-4315-84b5-ea9ef19f73a9',
+  secretKey:  process.env.LANGFUSE_SECRET_KEY,
+  publicKey:  process.env.LANGFUSE_PUBLIC_KEY,
   baseUrl:    'https://us.cloud.langfuse.com',
 });
 
