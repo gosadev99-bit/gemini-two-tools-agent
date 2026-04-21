@@ -4,3 +4,6 @@ node_modules/
 *.log
 memory.json 
 google-credentials.json
+--prune-empty
+FETCH_HEAD
+git rm --cached --ignore-unmatch google-credentials.json
