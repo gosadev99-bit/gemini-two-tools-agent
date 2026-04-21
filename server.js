@@ -297,10 +297,6 @@ Always use the right tool. Be concise and friendly.${profileContext}`
   if (history.length > 20) chatHistories[sessionId] = history.slice(-20);
   saveMemory(chatHistories);
 
-  return finalAnswer;
-  history.push({ role: "model", parts: [{ text: finalAnswer }] });
-
-  if (history.length > 20) chatHistories[sessionId] = history.slice(-20);
   saveMemory(chatHistories);
 
   return finalAnswer;
