@@ -520,40 +520,21 @@ app.post('/api/leads/research', async (req, res) => {
       searchWeb(`${company} funding valuation investors`)
     ]);
 
-    const summary = await ask(`
-      Summarize ${company} for a B2B sales rep in 3 paragraphs:
-      1. What they do and their market
-      2. Recent developments
-      3. Technology and infrastructure
-      Overview: ${overview} News: ${news} Tech: ${tech} Funding: ${funding}
-    `);
+   const summary = await ask(`Summarize ${company} for a B2B sales rep in 3 short paragraphs: what they do, recent news, tech stack. Data: ${overview.slice(0,300)} ${news.slice(0,200)} ${tech.slice(0,150)} ${funding.slice(0,150)}`);
+   const score = await ask(`Score ${company} as B2B lead. Reply EXACTLY:
+SCORE: [1-10]
+TIER: [HOT/WARM/COLD]
+BUDGET_ESTIMATE: [range]
+COMPANY_SIZE: [range]
+PAIN_POINTS:
+- [point 1]
+- [point 2]
+- [point 3]
+OPPORTUNITY: [one sentence]
+TIMING: [IMMEDIATE/3-6 MONTHS/6-12 MONTHS]
+Data: ${summary.slice(0,400)}`);
 
-    const score = await ask(`
-      Score ${company} as a B2B tech sales lead. Use EXACTLY this format:
-      SCORE: [1-10]
-      TIER: [HOT/WARM/COLD]
-      BUDGET_ESTIMATE: [range]
-      COMPANY_SIZE: [range]
-      PAIN_POINTS:
-      - [point 1]
-      - [point 2]
-      - [point 3]
-      OPPORTUNITY: [one sentence]
-      TIMING: [IMMEDIATE/3-6 MONTHS/6-12 MONTHS]
-      Research: ${summary}
-    `);
-
-    const email = await ask(`
-      Write a personalized cold outreach email to ${company}.
-      Research: ${summary} Score: ${score}
-      Rules: specific subject line, 3 short paragraphs, soft CTA for 15min call.
-      NO generic openers like "I hope this finds you well".
-      Format:
-      SUBJECT: [subject line]
-      
-      [email body]
-    `);
-
+  const email = await ask(`Write a cold outreach email to ${company}. 3 short paragraphs, soft CTA for 15min call. No generic openers. Format: SUBJECT: [line]\n\n[body]. Data: ${summary.slice(0,300)} ${score.slice(0,200)}`);
      const report = {
       company,
       timestamp: new Date().toISOString(),
@@ -568,14 +549,16 @@ const leadTrace = langfuse.trace({
   metadata: { company, tier: score.match(/TIER:\s*(\w+)/)?.[1] || 'N/A' }
 });
 leadTrace.generation({
-  name: 'lead-summary',
+  name: 'lead-pipeline',
   model: 'gemini-2.5-flash',
   input: company,
   output: summary.slice(0, 500),
+  usage: {
+    input:  Math.round((company.length + summary.length) / 4),
+    output: Math.round((summary.length + score.length + email.length) / 4),
+  }
 });
 // ──────────────────────────────────────────────────────
-
-console.log(`✅ Lead research complete: ${company}`);
     console.log(`✅ Lead research complete: ${company}`);
 
     // ── AUTO-LOG TO GOOGLE SHEETS ─────────────────────────
