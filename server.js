@@ -1,4 +1,15 @@
  require('dotenv').config();
+const { Langfuse } = require('langfuse');
+
+const langfuse = new Langfuse({
+  secretKey:  process.env.LANGFUSE_SECRET_KEY,
+  publicKey:  process.env.LANGFUSE_PUBLIC_KEY,
+  baseUrl:    'https://us.cloud.langfuse.com',
+});
+
+console.log('📊 Langfuse monitoring enabled');
+const { google } = require('googleapis');
+const nodemailer = require('nodemailer');
 const twilio = require('twilio');
 const express = require('express');
 const fs = require('fs');
