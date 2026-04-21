@@ -19,7 +19,6 @@ const PORT = process.env.PORT || 3001;
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // ── MIDDLEWARE ─────────────────────────────────────────────────────────────
-// ── MIDDLEWARE ─────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
@@ -197,12 +196,21 @@ async function github_pr({ action, title, head, base, body, pr_number }) {
 
 const toolHandlers = { search_web, calculate, github_pr };
 
+
 // ── AGENT RUNNER ───────────────────────────────────────────────────────────
 async function runAgent(sessionId, userMessage) {
+  // ── LANGFUSE TRACE ─────────────────────────────────────
+  const trace = langfuse.trace({
+    name: 'agent-chat',
+    userId: sessionId,
+    input: { message: userMessage },
+    metadata: { sessionId }
+  });
+  // ──────────────────────────────────────────────────────
+
   if (!chatHistories[sessionId]) chatHistories[sessionId] = [];
   const history = chatHistories[sessionId];
 
-  // Load user profile for RAG context
   const profile = loadProfile();
   const profileContext = Object.keys(profile).length
     ? `\n\nKNOWN USER FACTS:\n${Object.entries(profile)
@@ -221,12 +229,20 @@ async function runAgent(sessionId, userMessage) {
 Always use the right tool. Be concise and friendly.${profileContext}`
   });
 
-  // Clean history — only user and model text roles
   const cleanHistory = history.filter(msg =>
     (msg.role === 'user' || msg.role === 'model') && msg.parts[0]?.text
   );
 
   const chat = model.startChat({ history: cleanHistory });
+
+  // ── TRACE: LLM GENERATION ─────────────────────────────
+  const generation = trace.generation({
+    name: 'gemini-chat',
+    model: 'gemini-2.5-flash',
+    input: userMessage,
+  });
+  // ──────────────────────────────────────────────────────
+
   let response = await chat.sendMessage(userMessage);
   let candidate = response.response.candidates[0];
   let content = candidate.content;
@@ -234,17 +250,54 @@ Always use the right tool. Be concise and friendly.${profileContext}`
   while (content.parts.some(p => p.functionCall)) {
     const toolCallPart = content.parts.find(p => p.functionCall);
     const { name, args } = toolCallPart.functionCall;
+
+    // ── TRACE: TOOL CALL ────────────────────────────────
+    const toolSpan = trace.span({
+      name: `tool-${name}`,
+      input: args,
+    });
+    // ────────────────────────────────────────────────────
+
     console.log(`🤖 Tool: "${name}" args: ${JSON.stringify(args)}`);
     const toolResult = await toolHandlers[name](args);
+
+    // ── END TOOL SPAN ───────────────────────────────────
+    toolSpan.end({ output: toolResult });
+    // ────────────────────────────────────────────────────
+
     response = await chat.sendMessage([{ functionResponse: { name, response: toolResult } }]);
     candidate = response.response.candidates[0];
     content = candidate.content;
   }
 
   const finalAnswer = response.response.text();
+  const usage = response.response.usageMetadata;
 
-  // Save to memory
-  history.push({ role: "user", parts: [{ text: userMessage }] });
+  // ── END GENERATION + TRACE ─────────────────────────────
+  generation.end({
+    output: finalAnswer,
+    usage: {
+      input:  usage?.promptTokenCount     || 0,
+      output: usage?.candidatesTokenCount || 0,
+    }
+  });
+
+  trace.update({
+    output: { answer: finalAnswer },
+    metadata: {
+      inputTokens:  usage?.promptTokenCount     || 0,
+      outputTokens: usage?.candidatesTokenCount || 0,
+    }
+  });
+  // ──────────────────────────────────────────────────────
+
+  history.push({ role: "user",  parts: [{ text: userMessage }] });
+  history.push({ role: "model", parts: [{ text: finalAnswer }] });
+
+  if (history.length > 20) chatHistories[sessionId] = history.slice(-20);
+  saveMemory(chatHistories);
+
+  return finalAnswer;
   history.push({ role: "model", parts: [{ text: finalAnswer }] });
 
   if (history.length > 20) chatHistories[sessionId] = history.slice(-20);
@@ -342,7 +395,6 @@ Always use the right tool. Be concise and friendly.${profileContext}`
 
       // Send tool status to client
       res.write(`data: ${JSON.stringify({ type: 'tool', tool: name })}\n\n`);
-
       console.log(`🤖 Tool: "${name}"`);
       const toolResult = await toolHandlers[name](args);
 
@@ -441,9 +493,18 @@ app.post('/api/leads/research', async (req, res) => {
     }
 
     async function ask(prompt) {
+  for (let i = 0; i < 3; i++) {
+    try {
       const result = await model.generateContent(prompt);
       return result.response.text();
+    } catch (err) {
+      if (i < 2) {
+        console.log(`⏳ Retrying in 10s... (${i+1}/3)`);
+        await new Promise(r => setTimeout(r, 10000));
+      } else throw err;
     }
+  }
+}
 
     const [overview, news, tech, funding] = await Promise.all([
       searchWeb(`${company} company SaaS startup overview`),
@@ -486,14 +547,67 @@ app.post('/api/leads/research', async (req, res) => {
       [email body]
     `);
 
-    const report = {
+     const report = {
       company,
       timestamp: new Date().toISOString(),
       research: summary,
       news, tech, funding, score, email
     };
+     // ── LANGFUSE: TRACE LEAD RESEARCH ─────────────────────
+const leadTrace = langfuse.trace({
+  name: 'lead-research',
+  input: { company },
+  output: { score: score.slice(0, 200), email: email.slice(0, 200) },
+  metadata: { company, tier: score.match(/TIER:\s*(\w+)/)?.[1] || 'N/A' }
+});
+leadTrace.generation({
+  name: 'lead-summary',
+  model: 'gemini-2.5-flash',
+  input: company,
+  output: summary.slice(0, 500),
+});
+// ──────────────────────────────────────────────────────
 
+console.log(`✅ Lead research complete: ${company}`);
     console.log(`✅ Lead research complete: ${company}`);
+
+    // ── AUTO-LOG TO GOOGLE SHEETS ─────────────────────────
+    try {
+      const scoreMatch  = score.match(/SCORE:\s*(\d+)/);
+      const tierMatch   = score.match(/TIER:\s*(\w+)/);
+      const budgetMatch = score.match(/BUDGET_ESTIMATE:\s*(.+)/);
+      const oppMatch    = score.match(/OPPORTUNITY:\s*(.+)/);
+      const subjMatch   = email.match(/SUBJECT:\s*(.+)/);
+
+      const auth = new google.auth.GoogleAuth({
+        keyFile: './google-credentials.json',
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+      });
+      const sheets = google.sheets({ version: 'v4', auth });
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: process.env.GOOGLE_SHEET_ID,
+        range: 'Sheet1!A:H',
+        valueInputOption: 'USER_ENTERED',
+        resource: {
+          values: [[
+            new Date().toLocaleString(),
+            company,
+            scoreMatch  ? scoreMatch[1]         : 'N/A',
+            tierMatch   ? tierMatch[1]           : 'N/A',
+            budgetMatch ? budgetMatch[1].trim()  : 'N/A',
+            oppMatch    ? oppMatch[1].trim()     : 'N/A',
+            subjMatch   ? subjMatch[1].trim()    : 'N/A',
+            summary.slice(0, 500),
+          ]],
+        },
+      });
+      console.log(`📊 Auto-logged to Sheets: ${company}`);
+    } catch (sheetErr) {
+      console.error('Auto-sheet log error:', sheetErr.message);
+    }
+    // ─────────────────────────────────────────────────────
+
     res.json({ success: true, report });
 
   } catch (err) {
@@ -534,8 +648,81 @@ app.post('/api/notify/sms', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// ── GOOGLE SHEETS LOGGER ──────────────────────────────────────────────────
+app.post('/api/leads/log-sheet', async (req, res) => {
+  const { company, score, tier, budgetEstimate, opportunity, emailSubject, research } = req.body;
 
+  console.log(`\n📊 Logging lead to Google Sheets: ${company}`);
 
+  try {
+    const auth = new google.auth.GoogleAuth({
+      keyFile: './google-credentials.json',
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: 'Sheet1!A:H',
+      valueInputOption: 'USER_ENTERED',
+      resource: {
+        values: [[
+          new Date().toLocaleString(),
+          company,
+          score,
+          tier,
+          budgetEstimate || '',
+          opportunity || '',
+          emailSubject || '',
+          research ? research.slice(0, 500) : '',
+        ]],
+      },
+    });
+
+    console.log(`✅ Lead logged to Sheets: ${company}`);
+    res.json({ success: true, message: `${company} logged to Google Sheets` });
+
+  } catch (err) {
+    console.error('Sheets error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── EMAIL SENDER ──────────────────────────────────────────────────────────
+app.post('/api/leads/send-email', async (req, res) => {
+  const { to, subject, body, company } = req.body;
+
+  console.log(`\n📧 Sending email to ${to} for ${company}`);
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+    });
+
+    await transporter.sendMail({
+      from: `Gossaye Bireda <${process.env.GMAIL_USER}>`,
+      to,
+      subject,
+      text: body,
+    });
+
+    console.log(`✅ Email sent to ${to}`);
+    res.json({ success: true, message: `Email sent to ${to}` });
+
+  } catch (err) {
+    console.error('Email error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+// Flush Langfuse traces every 10 seconds
+setInterval(() => {
+  langfuse.flushAsync().catch(() => {});
+}, 10000);
 // ── START SERVER ───────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🚀 Gossaye AI Agent API running on port ${PORT}`);
