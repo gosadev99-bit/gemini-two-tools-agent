@@ -106,7 +106,39 @@ function rateLimit(ip, maxRequests = 20, windowMs = 60000) {
   requestCounts.set(ip, recentRequests);
   return true; // Allowed
 }
+ 
+// ── SECURITY: API KEY AUTHENTICATION ──────────────────────────────────────
+const VALID_API_KEYS = new Set([
+  process.env.API_KEY_MASTER,
+  process.env.API_KEY_CLIENT1,
+  process.env.API_KEY_REACT_UI,
+].filter(Boolean));
 
+function authenticateAPIKey(req, res, next) {
+  // Skip auth for health check
+  if (req.path === '/health') return next();
+
+  const apiKey = 
+    req.headers['x-api-key'] || 
+    req.headers['authorization']?.replace('Bearer ', '');
+
+  if (!apiKey) {
+    return res.status(401).json({ 
+      error: '🔐 API key required. Include X-API-Key header.' 
+    });
+  }
+
+  if (!VALID_API_KEYS.has(apiKey)) {
+    return res.status(401).json({ 
+      error: '🔐 Invalid API key.' 
+    });
+  }
+
+  next();
+}
+
+// Apply auth to all routes
+app.use(authenticateAPIKey);
 
 // ── MEMORY ─────────────────────────────────────────────────────────────────
 const MEMORY_FILE = './memory.json';
