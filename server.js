@@ -373,10 +373,7 @@ Always use the right tool. Be concise and friendly.${profileContext}`
 
   if (history.length > 20) chatHistories[sessionId] = history.slice(-20);
   saveMemory(chatHistories);
-
-  saveMemory(chatHistories);
-
-  return sanitizeOutput(finalAnswer);
+   return sanitizeOutput(finalAnswer);
 }
 
 // ── API ROUTES ─────────────────────────────────────────────────────────────
@@ -386,27 +383,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Gossaye AI Agent API is running!' });
 });
 
-// Main chat endpoint
-app.post('/api/chat', async (req, res) => {
-  const { message, sessionId = 'react-ui' } = req.body;
-
-  if (!message) {
-    return res.status(400).json({ error: 'Message is required' });
-  }
-
-  console.log(`\n💬 [${sessionId}] User: ${message}`);
-
-  try {
-    const answer = await runAgent(sessionId, message);
-    console.log(`✅ Answer: ${answer.slice(0, 100)}...`);
-    res.json({ answer });
-  } catch (err) {
-    console.error('Agent error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
 // ── STREAMING CHAT ENDPOINT ───────────────────────────────────────────────
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat/stream', async (req, res) => {
   const { message, sessionId = 'react-ui' } = req.body;
   
   // Rate limiting
