@@ -382,6 +382,35 @@ Always use the right tool. Be concise and friendly.${profileContext}`
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Gossaye AI Agent API is running!' });
 });
+ 
+// ── MAIN CHAT ENDPOINT ────────────────────────────────────────────────────
+app.post('/api/chat', async (req, res) => {
+  const { message, sessionId = 'react-ui' } = req.body;
+
+  // Rate limiting
+  const ip = req.ip || req.connection.remoteAddress;
+  if (!rateLimit(ip)) {
+    return res.status(429).json({ error: '⏳ Too many requests. Please wait a minute.' });
+  }
+
+  // Input validation
+  const validation = validateInput(message, 1000);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.reason });
+  }
+
+  console.log(`\n💬 [${sessionId}] User: ${message}`);
+
+  try {
+    const answer = await runAgent(sessionId, message);
+    console.log(`✅ Answer: ${answer.slice(0, 100)}...`);
+    res.json({ answer });
+  } catch (err) {
+    console.error('Agent error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // ── STREAMING CHAT ENDPOINT ───────────────────────────────────────────────
 app.post('/api/chat/stream', async (req, res) => {
