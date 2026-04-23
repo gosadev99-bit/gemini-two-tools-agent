@@ -43,19 +43,20 @@ app.use(express.json({ limit: '10kb' }));
 
 // ── SECURITY: INPUT VALIDATION ─────────────────────────────────────────────
 const INJECTION_PATTERNS = [
-  /ignore (all |previous |above )?(instructions|prompts|rules)/i,
+  /ignore.*(instructions|prompts|rules)/i,
   /you are now/i,
-  /forget (everything|all|your instructions)/i,
-  /act as (a |an )?(different|new|another)/i,
-  /pretend (you are|to be)/i,
+  /forget.*(everything|instructions)/i,
+  /act as.*(different|new|another)/i,
+  /pretend.*(you are|to be)/i,
   /jailbreak/i,
   /dan mode/i,
   /developer mode/i,
-  /bypass (your |all )?(restrictions|rules|guidelines)/i,
+  /bypass.*(restrictions|rules|guidelines)/i,
   /system prompt/i,
-  /reveal (your |the )?(prompt|instructions|system)/i,
+  /reveal.*(prompt|instructions|system)/i,
+  /disregard.*(instructions|rules)/i,
+  /override.*(instructions|rules)/i,
 ];
-
 function detectInjection(text) {
   if (!text || typeof text !== 'string') return false;
   return INJECTION_PATTERNS.some(pattern => pattern.test(text));
