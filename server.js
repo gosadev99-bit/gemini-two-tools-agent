@@ -39,7 +39,73 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
+
+// ── SECURITY: INPUT VALIDATION ─────────────────────────────────────────────
+const INJECTION_PATTERNS = [
+  /ignore (all |previous |above )?(instructions|prompts|rules)/i,
+  /you are now/i,
+  /forget (everything|all|your instructions)/i,
+  /act as (a |an )?(different|new|another)/i,
+  /pretend (you are|to be)/i,
+  /jailbreak/i,
+  /dan mode/i,
+  /developer mode/i,
+  /bypass (your |all )?(restrictions|rules|guidelines)/i,
+  /system prompt/i,
+  /reveal (your |the )?(prompt|instructions|system)/i,
+];
+
+function detectInjection(text) {
+  if (!text || typeof text !== 'string') return false;
+  return INJECTION_PATTERNS.some(pattern => pattern.test(text));
+}
+
+function validateInput(text, maxLength = 500) {
+  if (!text || typeof text !== 'string') {
+    return { valid: false, reason: 'Input must be a non-empty string' };
+  }
+  if (text.trim().length === 0) {
+    return { valid: false, reason: 'Input cannot be empty' };
+  }
+  if (text.length > maxLength) {
+    return { valid: false, reason: `Input too long (max ${maxLength} characters)` };
+  }
+  if (detectInjection(text)) {
+    return { valid: false, reason: 'Invalid input detected' };
+  }
+  return { valid: true };
+}
+
+function sanitizeOutput(text) {
+  if (!text || typeof text !== 'string') return '';
+  // Remove any system-level information leakage
+  return text
+    .replace(/sk-[a-zA-Z0-9-]+/g, '[REDACTED]')
+    .replace(/pk-[a-zA-Z0-9-]+/g, '[REDACTED]')
+    .replace(/AIza[a-zA-Z0-9-_]+/g, '[REDACTED]')
+    .trim();
+}
+
+// ── SECURITY: RATE LIMITING ────────────────────────────────────────────────
+const requestCounts = new Map();
+
+function rateLimit(ip, maxRequests = 20, windowMs = 60000) {
+  const now = Date.now();
+  const userRequests = requestCounts.get(ip) || [];
+  
+  // Remove old requests outside window
+  const recentRequests = userRequests.filter(time => now - time < windowMs);
+  
+  if (recentRequests.length >= maxRequests) {
+    return false; // Rate limited
+  }
+  
+  recentRequests.push(now);
+  requestCounts.set(ip, recentRequests);
+  return true; // Allowed
+}
+
 
 // ── MEMORY ─────────────────────────────────────────────────────────────────
 const MEMORY_FILE = './memory.json';
@@ -310,7 +376,7 @@ Always use the right tool. Be concise and friendly.${profileContext}`
 
   saveMemory(chatHistories);
 
-  return finalAnswer;
+  return sanitizeOutput(finalAnswer);
 }
 
 // ── API ROUTES ─────────────────────────────────────────────────────────────
@@ -340,11 +406,19 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 // ── STREAMING CHAT ENDPOINT ───────────────────────────────────────────────
-app.post('/api/chat/stream', async (req, res) => {
+app.post('/api/chat', async (req, res) => {
   const { message, sessionId = 'react-ui' } = req.body;
+  
+  // Rate limiting
+  const ip = req.ip || req.connection.remoteAddress;
+  if (!rateLimit(ip)) {
+    return res.status(429).json({ error: '⏳ Too many requests. Please wait a minute.' });
+  }
 
-  if (!message) {
-    return res.status(400).json({ error: 'Message is required' });
+  // Input validation
+  const validation = validateInput(message, 1000);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.reason });
   }
 
   console.log(`\n💬 [STREAM] [${sessionId}] User: ${message}`);
@@ -482,8 +556,18 @@ app.delete('/api/chat/:sessionId', (req, res) => {
 // ── LEAD RESEARCH ENDPOINT ─────────────────────────────────────────────────
 app.post('/api/leads/research', async (req, res) => {
   const { company } = req.body;
-  if (!company) return res.status(400).json({ error: 'Company name required' });
 
+  // Rate limiting
+  const ip = req.ip || req.connection.remoteAddress;
+  if (!rateLimit(ip, 10, 60000)) { // 10 lead researches per minute
+    return res.status(429).json({ error: '⏳ Too many requests. Please wait a minute.' });
+  }
+
+  // Input validation
+  const validation = validateInput(company, 100);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.reason });
+  }
   console.log(`\n💼 Lead Research: "${company}"`);
 
   try {
