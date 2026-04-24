@@ -41,6 +41,29 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '10kb' }));
 
+// ── SECURITY: API KEY AUTHENTICATION ──────────────────────────────────────
+const VALID_API_KEYS = new Set([
+  process.env.API_KEY_MASTER,
+  process.env.API_KEY_CLIENT1,
+  process.env.API_KEY_REACT_UI,
+].filter(Boolean));
+
+function authenticateAPIKey(req, res, next) {
+  if (req.path === '/health') return next();
+  const apiKey =
+    req.headers['x-api-key'] ||
+    req.headers['authorization']?.replace('Bearer ', '');
+  if (!apiKey) {
+    return res.status(401).json({ error: '🔐 API key required.' });
+  }
+  if (!VALID_API_KEYS.has(apiKey)) {
+    return res.status(401).json({ error: '🔐 Invalid API key.' });
+  }
+  next();
+}
+
+app.use(authenticateAPIKey);
+
 // ── SECURITY: INPUT VALIDATION ─────────────────────────────────────────────
 const INJECTION_PATTERNS = [
   /ignore.*(instructions|prompts|rules)/i,
