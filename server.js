@@ -1,4 +1,4 @@
- require('dotenv').config();
+require('dotenv').config();
 const { Langfuse } = require('langfuse');
 
 const langfuse = new Langfuse({
@@ -33,7 +33,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -80,6 +80,7 @@ const INJECTION_PATTERNS = [
   /disregard.*(instructions|rules)/i,
   /override.*(instructions|rules)/i,
 ];
+
 function detectInjection(text) {
   if (!text || typeof text !== 'string') return false;
   return INJECTION_PATTERNS.some(pattern => pattern.test(text));
@@ -103,7 +104,6 @@ function validateInput(text, maxLength = 500) {
 
 function sanitizeOutput(text) {
   if (!text || typeof text !== 'string') return '';
-  // Remove any system-level information leakage
   return text
     .replace(/sk-[a-zA-Z0-9-]+/g, '[REDACTED]')
     .replace(/pk-[a-zA-Z0-9-]+/g, '[REDACTED]')
@@ -117,51 +117,14 @@ const requestCounts = new Map();
 function rateLimit(ip, maxRequests = 20, windowMs = 60000) {
   const now = Date.now();
   const userRequests = requestCounts.get(ip) || [];
-  
-  // Remove old requests outside window
   const recentRequests = userRequests.filter(time => now - time < windowMs);
-  
   if (recentRequests.length >= maxRequests) {
-    return false; // Rate limited
+    return false;
   }
-  
   recentRequests.push(now);
   requestCounts.set(ip, recentRequests);
-  return true; // Allowed
+  return true;
 }
- 
-// ── SECURITY: API KEY AUTHENTICATION ──────────────────────────────────────
-const VALID_API_KEYS = new Set([
-  process.env.API_KEY_MASTER,
-  process.env.API_KEY_CLIENT1,
-  process.env.API_KEY_REACT_UI,
-].filter(Boolean));
-
-function authenticateAPIKey(req, res, next) {
-  // Skip auth for health check
-  if (req.path === '/health') return next();
-
-  const apiKey = 
-    req.headers['x-api-key'] || 
-    req.headers['authorization']?.replace('Bearer ', '');
-
-  if (!apiKey) {
-    return res.status(401).json({ 
-      error: '🔐 API key required. Include X-API-Key header.' 
-    });
-  }
-
-  if (!VALID_API_KEYS.has(apiKey)) {
-    return res.status(401).json({ 
-      error: '🔐 Invalid API key.' 
-    });
-  }
-
-  next();
-}
-
-// Apply auth to all routes
-app.use(authenticateAPIKey);
 
 // ── MEMORY ─────────────────────────────────────────────────────────────────
 const MEMORY_FILE = './memory.json';
@@ -329,17 +292,14 @@ async function github_pr({ action, title, head, base, body, pr_number }) {
 
 const toolHandlers = { search_web, calculate, github_pr };
 
-
 // ── AGENT RUNNER ───────────────────────────────────────────────────────────
 async function runAgent(sessionId, userMessage) {
-  // ── LANGFUSE TRACE ─────────────────────────────────────
   const trace = langfuse.trace({
     name: 'agent-chat',
     userId: sessionId,
     input: { message: userMessage },
     metadata: { sessionId }
   });
-  // ──────────────────────────────────────────────────────
 
   if (!chatHistories[sessionId]) chatHistories[sessionId] = [];
   const history = chatHistories[sessionId];
@@ -368,13 +328,11 @@ Always use the right tool. Be concise and friendly.${profileContext}`
 
   const chat = model.startChat({ history: cleanHistory });
 
-  // ── TRACE: LLM GENERATION ─────────────────────────────
   const generation = trace.generation({
     name: 'gemini-chat',
     model: 'gemini-2.5-flash',
     input: userMessage,
   });
-  // ──────────────────────────────────────────────────────
 
   let response = await chat.sendMessage(userMessage);
   let candidate = response.response.candidates[0];
@@ -384,19 +342,10 @@ Always use the right tool. Be concise and friendly.${profileContext}`
     const toolCallPart = content.parts.find(p => p.functionCall);
     const { name, args } = toolCallPart.functionCall;
 
-    // ── TRACE: TOOL CALL ────────────────────────────────
-    const toolSpan = trace.span({
-      name: `tool-${name}`,
-      input: args,
-    });
-    // ────────────────────────────────────────────────────
-
+    const toolSpan = trace.span({ name: `tool-${name}`, input: args });
     console.log(`🤖 Tool: "${name}" args: ${JSON.stringify(args)}`);
     const toolResult = await toolHandlers[name](args);
-
-    // ── END TOOL SPAN ───────────────────────────────────
     toolSpan.end({ output: toolResult });
-    // ────────────────────────────────────────────────────
 
     response = await chat.sendMessage([{ functionResponse: { name, response: toolResult } }]);
     candidate = response.response.candidates[0];
@@ -406,7 +355,6 @@ Always use the right tool. Be concise and friendly.${profileContext}`
   const finalAnswer = response.response.text();
   const usage = response.response.usageMetadata;
 
-  // ── END GENERATION + TRACE ─────────────────────────────
   generation.end({
     output: finalAnswer,
     usage: {
@@ -422,34 +370,31 @@ Always use the right tool. Be concise and friendly.${profileContext}`
       outputTokens: usage?.candidatesTokenCount || 0,
     }
   });
-  // ──────────────────────────────────────────────────────
 
   history.push({ role: "user",  parts: [{ text: userMessage }] });
   history.push({ role: "model", parts: [{ text: finalAnswer }] });
 
   if (history.length > 20) chatHistories[sessionId] = history.slice(-20);
   saveMemory(chatHistories);
-   return sanitizeOutput(finalAnswer);
+
+  return sanitizeOutput(finalAnswer);
 }
 
 // ── API ROUTES ─────────────────────────────────────────────────────────────
 
-// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Gossaye AI Agent API is running!' });
 });
- 
+
 // ── MAIN CHAT ENDPOINT ────────────────────────────────────────────────────
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId = 'react-ui' } = req.body;
 
-  // Rate limiting
   const ip = req.ip || req.connection.remoteAddress;
   if (!rateLimit(ip)) {
     return res.status(429).json({ error: '⏳ Too many requests. Please wait a minute.' });
   }
 
-  // Input validation
   const validation = validateInput(message, 1000);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.reason });
@@ -467,18 +412,15 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-
 // ── STREAMING CHAT ENDPOINT ───────────────────────────────────────────────
 app.post('/api/chat/stream', async (req, res) => {
   const { message, sessionId = 'react-ui' } = req.body;
-  
-  // Rate limiting
+
   const ip = req.ip || req.connection.remoteAddress;
   if (!rateLimit(ip)) {
     return res.status(429).json({ error: '⏳ Too many requests. Please wait a minute.' });
   }
 
-  // Input validation
   const validation = validateInput(message, 1000);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.reason });
@@ -486,7 +428,6 @@ app.post('/api/chat/stream', async (req, res) => {
 
   console.log(`\n💬 [STREAM] [${sessionId}] User: ${message}`);
 
-  // Set headers for Server-Sent Events (SSE)
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -497,7 +438,6 @@ app.post('/api/chat/stream', async (req, res) => {
     if (!chatHistories[sessionId]) chatHistories[sessionId] = [];
     const history = chatHistories[sessionId];
 
-    // Load profile for RAG
     const profile = loadProfile();
     const profileContext = Object.keys(profile).length
       ? `\n\nKNOWN USER FACTS:\n${Object.entries(profile)
@@ -522,22 +462,18 @@ Always use the right tool. Be concise and friendly.${profileContext}`
 
     const chat = model.startChat({ history: cleanHistory });
 
-    // Track token usage
     let inputTokens = 0;
     let outputTokens = 0;
     let fullAnswer = '';
 
-    // Handle tool calls first (non-streaming)
     let response = await chat.sendMessage(message);
     let candidate = response.response.candidates[0];
     let content = candidate.content;
 
-    // Tool loop
     while (content.parts.some(p => p.functionCall)) {
       const toolCallPart = content.parts.find(p => p.functionCall);
       const { name, args } = toolCallPart.functionCall;
 
-      // Send tool status to client
       res.write(`data: ${JSON.stringify({ type: 'tool', tool: name })}\n\n`);
       console.log(`🤖 Tool: "${name}"`);
       const toolResult = await toolHandlers[name](args);
@@ -547,30 +483,25 @@ Always use the right tool. Be concise and friendly.${profileContext}`
       content = candidate.content;
     }
 
-    // Stream the final answer directly — no second Gemini call
-const finalText = response.response.text();
-fullAnswer = finalText;
+    const finalText = response.response.text();
+    fullAnswer = finalText;
 
-// Simulate streaming by sending words one by one
-const words = finalText.split(' ');
-for (const word of words) {
-  res.write(`data: ${JSON.stringify({ type: 'chunk', text: word + ' ' })}\n\n`);
-  await new Promise(r => setTimeout(r, 30)); // 30ms between words
-}
+    const words = finalText.split(' ');
+    for (const word of words) {
+      res.write(`data: ${JSON.stringify({ type: 'chunk', text: word + ' ' })}\n\n`);
+      await new Promise(r => setTimeout(r, 30));
+    }
 
-    // Get usage metadata
     const usage = response.response.usageMetadata;
     inputTokens = usage?.promptTokenCount || 0;
     outputTokens = usage?.candidatesTokenCount || 0;
 
-    // Calculate cost (Gemini 2.5 Flash pricing)
     const inputCost  = (inputTokens  / 1000000) * 0.075;
     const outputCost = (outputTokens / 1000000) * 0.30;
     const totalCost  = inputCost + outputCost;
 
     console.log(`📊 Tokens: ${inputTokens} in / ${outputTokens} out | Cost: $${totalCost.toFixed(6)}`);
 
-    // Send completion signal with cost data
     res.write(`data: ${JSON.stringify({
       type: 'done',
       fullAnswer,
@@ -582,7 +513,6 @@ for (const word of words) {
       }
     })}\n\n`);
 
-    // Save to memory
     history.push({ role: "user", parts: [{ text: message }] });
     history.push({ role: "model", parts: [{ text: fullAnswer }] });
     if (history.length > 20) chatHistories[sessionId] = history.slice(-20);
@@ -597,40 +527,37 @@ for (const word of words) {
   }
 });
 
-// Get user profile
 app.get('/api/profile', (req, res) => {
   res.json(loadProfile());
 });
 
-// Update user profile
 app.post('/api/profile', (req, res) => {
   const profile = req.body;
   saveProfile(profile);
   res.json({ success: true, profile });
 });
 
-// Clear chat history
 app.delete('/api/chat/:sessionId', (req, res) => {
   const { sessionId } = req.params;
   delete chatHistories[sessionId];
   saveMemory(chatHistories);
   res.json({ success: true });
 });
+
 // ── LEAD RESEARCH ENDPOINT ─────────────────────────────────────────────────
 app.post('/api/leads/research', async (req, res) => {
   const { company } = req.body;
 
-  // Rate limiting
   const ip = req.ip || req.connection.remoteAddress;
-  if (!rateLimit(ip, 10, 60000)) { // 10 lead researches per minute
+  if (!rateLimit(ip, 10, 60000)) {
     return res.status(429).json({ error: '⏳ Too many requests. Please wait a minute.' });
   }
 
-  // Input validation
   const validation = validateInput(company, 100);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.reason });
   }
+
   console.log(`\n💼 Lead Research: "${company}"`);
 
   try {
@@ -647,18 +574,18 @@ app.post('/api/leads/research', async (req, res) => {
     }
 
     async function ask(prompt) {
-  for (let i = 0; i < 3; i++) {
-    try {
-      const result = await model.generateContent(prompt);
-      return result.response.text();
-    } catch (err) {
-      if (i < 2) {
-        console.log(`⏳ Retrying in 10s... (${i+1}/3)`);
-        await new Promise(r => setTimeout(r, 10000));
-      } else throw err;
+      for (let i = 0; i < 3; i++) {
+        try {
+          const result = await model.generateContent(prompt);
+          return result.response.text();
+        } catch (err) {
+          if (i < 2) {
+            console.log(`⏳ Retrying in 10s... (${i+1}/3)`);
+            await new Promise(r => setTimeout(r, 10000));
+          } else throw err;
+        }
+      }
     }
-  }
-}
 
     const [overview, news, tech, funding] = await Promise.all([
       searchWeb(`${company} company SaaS startup overview`),
@@ -667,8 +594,8 @@ app.post('/api/leads/research', async (req, res) => {
       searchWeb(`${company} funding valuation investors`)
     ]);
 
-   const summary = await ask(`Summarize ${company} for a B2B sales rep in 3 short paragraphs: what they do, recent news, tech stack. Data: ${overview.slice(0,300)} ${news.slice(0,200)} ${tech.slice(0,150)} ${funding.slice(0,150)}`);
-   const score = await ask(`Score ${company} as B2B lead. Reply EXACTLY:
+    const summary = await ask(`Summarize ${company} for a B2B sales rep in 3 short paragraphs: what they do, recent news, tech stack. Data: ${overview.slice(0,300)} ${news.slice(0,200)} ${tech.slice(0,150)} ${funding.slice(0,150)}`);
+    const score = await ask(`Score ${company} as B2B lead. Reply EXACTLY:
 SCORE: [1-10]
 TIER: [HOT/WARM/COLD]
 BUDGET_ESTIMATE: [range]
@@ -681,31 +608,33 @@ OPPORTUNITY: [one sentence]
 TIMING: [IMMEDIATE/3-6 MONTHS/6-12 MONTHS]
 Data: ${summary.slice(0,400)}`);
 
-  const email = await ask(`Write a cold outreach email to ${company}. 3 short paragraphs, soft CTA for 15min call. No generic openers. Format: SUBJECT: [line]\n\n[body]. Data: ${summary.slice(0,300)} ${score.slice(0,200)}`);
-     const report = {
+    const email = await ask(`Write a cold outreach email to ${company}. 3 short paragraphs, soft CTA for 15min call. No generic openers. Format: SUBJECT: [line]\n\n[body]. Data: ${summary.slice(0,300)} ${score.slice(0,200)}`);
+
+    const report = {
       company,
       timestamp: new Date().toISOString(),
       research: summary,
       news, tech, funding, score, email
     };
-     // ── LANGFUSE: TRACE LEAD RESEARCH ─────────────────────
-const leadTrace = langfuse.trace({
-  name: 'lead-research',
-  input: { company },
-  output: { score: score.slice(0, 200), email: email.slice(0, 200) },
-  metadata: { company, tier: score.match(/TIER:\s*(\w+)/)?.[1] || 'N/A' }
-});
-leadTrace.generation({
-  name: 'lead-pipeline',
-  model: 'gemini-2.5-flash',
-  input: company,
-  output: summary.slice(0, 500),
-  usage: {
-    input:  Math.round((company.length + summary.length) / 4),
-    output: Math.round((summary.length + score.length + email.length) / 4),
-  }
-});
-// ──────────────────────────────────────────────────────
+
+    // ── LANGFUSE: TRACE LEAD RESEARCH ─────────────────────
+    const leadTrace = langfuse.trace({
+      name: 'lead-research',
+      input: { company },
+      output: { score: score.slice(0, 200), email: email.slice(0, 200) },
+      metadata: { company, tier: score.match(/TIER:\s*(\w+)/)?.[1] || 'N/A' }
+    });
+    leadTrace.generation({
+      name: 'lead-pipeline',
+      model: 'gemini-2.5-flash',
+      input: company,
+      output: summary.slice(0, 500),
+      usage: {
+        input:  Math.round((company.length + summary.length) / 4),
+        output: Math.round((summary.length + score.length + email.length) / 4),
+      }
+    });
+
     console.log(`✅ Lead research complete: ${company}`);
 
     // ── AUTO-LOG TO GOOGLE SHEETS ─────────────────────────
@@ -743,7 +672,6 @@ leadTrace.generation({
     } catch (sheetErr) {
       console.error('Auto-sheet log error:', sheetErr.message);
     }
-    // ─────────────────────────────────────────────────────
 
     res.json({ success: true, report });
 
@@ -752,6 +680,7 @@ leadTrace.generation({
     res.status(500).json({ error: err.message });
   }
 });
+
 // ── SMS NOTIFICATION ───────────────────────────────────────────────────────
 app.post('/api/notify/sms', async (req, res) => {
   const { name, phone, email, service, message } = req.body;
@@ -764,7 +693,7 @@ app.post('/api/notify/sms', async (req, res) => {
       process.env.TWILIO_AUTH_TOKEN
     );
 
-    const smsBody = 
+    const smsBody =
       `🔔 New Booking!\n` +
       `👤 ${name}\n` +
       `📞 ${phone}\n` +
@@ -785,6 +714,7 @@ app.post('/api/notify/sms', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // ── GOOGLE SHEETS LOGGER ──────────────────────────────────────────────────
 app.post('/api/leads/log-sheet', async (req, res) => {
   const { company, score, tier, budgetEstimate, opportunity, emailSubject, research } = req.body;
@@ -856,10 +786,12 @@ app.post('/api/leads/send-email', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // Flush Langfuse traces every 10 seconds
 setInterval(() => {
   langfuse.flushAsync().catch(() => {});
 }, 10000);
+
 // ── START SERVER ───────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🚀 Gossaye AI Agent API running on port ${PORT}`);
