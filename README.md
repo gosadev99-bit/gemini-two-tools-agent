@@ -3,7 +3,7 @@
 A conversational AI agent built with Google Gemini that intelligently 
 decides which tool to use based on your question.
 
- Live demo: https://api.gosanotary.tech
+ Live demo: https://api.gosanotary.tech/docs
 
 ## 🚀 Features
 
