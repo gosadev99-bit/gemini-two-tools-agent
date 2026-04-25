@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gossaye AI Agent — API Documentation</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #060a14;
+    --bg2:      #0a1628;
+    --bg3:      #0f1e35;
+    --border:   #1e293b;
+    --border2:  #334155;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --dim:      #334155;
+    --blue:     #3b82f6;
+    --purple:   #8b5cf6;
+    --green:    #10b981;
+    --orange:   #f59e0b;
+    --red:      #ef4444;
+    --teal:     #06b6d4;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* ── LAYOUT ── */
+  .layout { display: flex; min-height: 100vh; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 260px;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    overflow-y: auto;
+    z-index: 100;
+    padding-bottom: 32px;
+  }
+
+  .sidebar-logo {
+    padding: 24px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-logo .logo-text {
+    font-size: 16px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .sidebar-logo .version {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .sidebar-section {
+    padding: 20px 20px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  .sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 20px;
+    font-size: 13px;
+    color: var(--muted);
+    text-decoration: none;
+    transition: all 0.15s;
+    border-left: 2px solid transparent;
+    cursor: pointer;
+  }
+
+  .sidebar-link:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  .sidebar-link.active { color: var(--blue); border-left-color: var(--blue); background: rgba(59,130,246,0.06); }
+
+  .method-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .get    { background: rgba(16,185,129,0.15);  color: var(--green);  }
+  .post   { background: rgba(59,130,246,0.15);  color: var(--blue);   }
+  .delete { background: rgba(239,68,68,0.15);   color: var(--red);    }
+
+  /* ── MAIN ── */
+  .main {
+    margin-left: 260px;
+    flex: 1;
+    max-width: 900px;
+    padding: 48px 48px 80px;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    margin-bottom: 48px;
+    padding-bottom: 48px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.3);
+    color: #93c5fd;
+    padding: 4px 12px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  .hero h1 {
+    font-size: 40px;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 16px;
+    letter-spacing: -1px;
+  }
+
+  .hero h1 span {
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero p {
+    font-size: 16px;
+    color: var(--muted);
+    max-width: 600px;
+    line-height: 1.7;
+  }
+
+  .base-url-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-top: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+
+  .base-url-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+
+  .base-url-value { color: var(--green); }
+
+  /* ── SECTIONS ── */
+  .section {
+    margin-bottom: 56px;
+    scroll-margin-top: 24px;
+  }
+
+  .section-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: #f1f5f9;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+  }
+
+  .section-desc {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 24px;
+    line-height: 1.7;
+  }
+
+  /* ── ENDPOINT ── */
+  .endpoint {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    transition: border-color 0.2s;
+  }
+
+  .endpoint:hover { border-color: var(--border2); }
+
+  .endpoint-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 20px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .endpoint-method {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 6px;
+    flex-shrink: 0;
+    min-width: 56px;
+    text-align: center;
+  }
+
+  .endpoint-path {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: #f1f5f9;
+    flex: 1;
+  }
+
+  .endpoint-desc {
+    font-size: 13px;
+    color: var(--muted);
+    flex: 1;
+    text-align: right;
+  }
+
+  .endpoint-toggle {
+    color: var(--dim);
+    font-size: 12px;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+
+  .endpoint-body {
+    display: none;
+    border-top: 1px solid var(--border);
+    padding: 20px;
+  }
+
+  .endpoint-body.open { display: block; }
+  .endpoint.open .endpoint-toggle { transform: rotate(180deg); }
+
+  /* ── CODE BLOCKS ── */
+  .code-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    margin-top: 16px;
+  }
+
+  .code-label:first-child { margin-top: 0; }
+
+  pre {
+    background: #020509;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #94a3b8;
+  }
+
+  .kw  { color: var(--purple); }
+  .str { color: var(--green);  }
+  .num { color: var(--orange); }
+  .key { color: var(--blue);   }
+  .cmt { color: var(--dim); font-style: italic; }
+
+  /* ── PARAMS TABLE ── */
+  .params-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+
+  .params-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .params-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    vertical-align: top;
+  }
+
+  .param-name {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--blue);
+    font-size: 12px;
+  }
+
+  .param-type {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--orange);
+  }
+
+  .param-required {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--red);
+    background: rgba(239,68,68,0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .param-optional {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    background: rgba(100,116,139,0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .param-desc { color: var(--muted); font-size: 12px; }
+
+  /* ── STATUS BADGES ── */
+  .status-200 { color: var(--green); font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; }
+  .status-400 { color: var(--orange); font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; }
+  .status-401 { color: var(--red); font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; }
+  .status-429 { color: var(--orange); font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; }
+
+  /* ── INFO BOXES ── */
+  .info-box {
+    background: rgba(59,130,246,0.08);
+    border: 1px solid rgba(59,130,246,0.2);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 13px;
+    color: #93c5fd;
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  .warning-box {
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.2);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 13px;
+    color: #fcd34d;
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  /* ── PIPELINE DIAGRAM ── */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 20px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .pipeline-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    text-align: center;
+    min-width: 90px;
+  }
+
+  .pipeline-step .step-icon { font-size: 18px; margin-bottom: 4px; }
+  .pipeline-step .step-name { color: var(--blue); font-size: 11px; }
+  .pipeline-arrow { color: var(--dim); font-size: 18px; }
+
+  /* ── COPY BUTTON ── */
+  .copy-btn {
+    float: right;
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.2);
+    color: var(--blue);
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: 'Syne', sans-serif;
+    transition: all 0.2s;
+    margin-bottom: 6px;
+  }
+
+  .copy-btn:hover { background: rgba(59,130,246,0.2); }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 40px 0;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; padding: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-text">Gossaye AI Agent</div>
+      <div class="version">API v1.0 • api.gosanotary.tech</div>
+    </div>
+
+    <div class="sidebar-section">Getting Started</div>
+    <a class="sidebar-link active" href="#overview">📖 Overview</a>
+    <a class="sidebar-link" href="#auth">🔐 Authentication</a>
+    <a class="sidebar-link" href="#errors">⚠️ Error Handling</a>
+    <a class="sidebar-link" href="#rate-limits">⏱ Rate Limits</a>
+
+    <div class="sidebar-section">Chat Agent</div>
+    <a class="sidebar-link" href="#chat-stream">
+      <span class="method-badge post">POST</span>
+      /api/chat/stream
+    </a>
+    <a class="sidebar-link" href="#chat">
+      <span class="method-badge post">POST</span>
+      /api/chat
+    </a>
+    <a class="sidebar-link" href="#chat-delete">
+      <span class="method-badge delete">DEL</span>
+      /api/chat/:id
+    </a>
+    <a class="sidebar-link" href="#profile">
+      <span class="method-badge get">GET</span>
+      /api/profile
+    </a>
+
+    <div class="sidebar-section">Lead Pipeline</div>
+    <a class="sidebar-link" href="#leads-research">
+      <span class="method-badge post">POST</span>
+      /api/leads/research
+    </a>
+    <a class="sidebar-link" href="#leads-log">
+      <span class="method-badge post">POST</span>
+      /api/leads/log-sheet
+    </a>
+    <a class="sidebar-link" href="#leads-email">
+      <span class="method-badge post">POST</span>
+      /api/leads/send-email
+    </a>
+
+    <div class="sidebar-section">Notifications</div>
+    <a class="sidebar-link" href="#sms">
+      <span class="method-badge post">POST</span>
+      /api/notify/sms
+    </a>
+    <a class="sidebar-link" href="#health">
+      <span class="method-badge get">GET</span>
+      /health
+    </a>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main class="main">
+
+    <!-- HERO -->
+    <div class="hero" id="overview">
+      <div class="hero-badge">🤖 REST API</div>
+      <h1>Gossaye AI Agent<br><span>API Documentation</span></h1>
+      <p>
+        Production-grade API powering a multi-tool AI agent with streaming responses,
+        4-agent lead research pipeline, Google Sheets integration, and SMS notifications.
+        Built with Node.js, Express, and Google Gemini 2.5 Flash.
+      </p>
+      <div class="base-url-box">
+        <span class="base-url-label">Base URL</span>
+        <span class="base-url-value">https://api.gosanotary.tech</span>
+      </div>
+    </div>
+
+    <!-- AUTHENTICATION -->
+    <div class="section" id="auth">
+      <div class="section-title">🔐 Authentication</div>
+      <div class="section-desc">
+        All API endpoints require an API key passed via the <code style="font-family:monospace;color:var(--blue)">X-API-Key</code> header.
+        The <code style="font-family:monospace;color:var(--blue)">/health</code> endpoint is public and does not require authentication.
+      </div>
+
+      <div class="info-box">
+        💡 Include your API key in every request using the <strong>X-API-Key</strong> header.
+        Contact the API owner to obtain a valid key.
+      </div>
+
+      <div class="code-label">Request Header</div>
+      <pre><span class="key">X-API-Key</span>: <span class="str">your-api-key-here</span>
+<span class="key">Content-Type</span>: <span class="str">application/json</span></pre>
+
+      <div class="code-label">Example — Unauthorized (401)</div>
+      <pre>{
+  <span class="key">"error"</span>: <span class="str">"🔐 API key required."</span>
+}
+
+{
+  <span class="key">"error"</span>: <span class="str">"🔐 Invalid API key."</span>
+}</pre>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- RATE LIMITS -->
+    <div class="section" id="rate-limits">
+      <div class="section-title">⏱ Rate Limits</div>
+      <div class="section-desc">
+        Rate limits are applied per IP address to prevent abuse.
+      </div>
+
+      <table class="params-table">
+        <thead>
+          <tr>
+            <th>Endpoint</th>
+            <th>Limit</th>
+            <th>Window</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="param-name">/api/chat, /api/chat/stream</span></td>
+            <td>20 requests</td>
+            <td>per minute</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">/api/leads/research</span></td>
+            <td>10 requests</td>
+            <td>per minute</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">All other endpoints</span></td>
+            <td>20 requests</td>
+            <td>per minute</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-label">Rate Limited Response (429)</div>
+      <pre>{
+  <span class="key">"error"</span>: <span class="str">"⏳ Too many requests. Please wait a minute."</span>
+}</pre>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- CHAT STREAM -->
+    <div class="section" id="chat-stream">
+      <div class="section-title">💬 Chat Agent</div>
+      <div class="section-desc">
+        AI agent with 3 tools: web search, calculator, and GitHub PR management.
+        Supports both streaming (SSE) and standard JSON responses.
+      </div>
+
+      <div class="endpoint open" id="ep-stream">
+        <div class="endpoint-header" onclick="toggleEndpoint('ep-stream')">
+          <span class="endpoint-method post">POST</span>
+          <span class="endpoint-path">/api/chat/stream</span>
+          <span class="endpoint-desc">Streaming chat with SSE</span>
+          <span class="endpoint-toggle">▼</span>
+        </div>
+        <div class="endpoint-body open">
+          <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+            Send a message and receive a streaming response via Server-Sent Events (SSE).
+            The agent automatically selects and uses tools as needed.
+          </p>
+
+          <div class="code-label">Request Body</div>
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="param-name">message</span></td>
+                <td><span class="param-type">string</span></td>
+                <td><span class="param-required">required</span></td>
+                <td class="param-desc">User message (max 1000 chars)</td>
+              </tr>
+              <tr>
+                <td><span class="param-name">sessionId</span></td>
+                <td><span class="param-type">string</span></td>
+                <td><span class="param-optional">optional</span></td>
+                <td class="param-desc">Session ID for conversation history (default: "react-ui")</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="code-label">Example Request</div>
+          <pre><span class="kw">curl</span> -X POST https://api.gosanotary.tech/api/chat/stream \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -H <span class="str">"X-API-Key: your-api-key"</span> \
+  -d <span class="str">'{"message":"what is 25% of $5000?","sessionId":"user-123"}'</span></pre>
+
+          <div class="code-label">SSE Response Events</div>
+          <pre><span class="cmt">// Tool being called</span>
+<span class="key">data</span>: {<span class="str">"type"</span>:<span class="str">"tool"</span>, <span class="str">"tool"</span>:<span class="str">"calculate"</span>}
+
+<span class="cmt">// Streaming text chunks</span>
+<span class="key">data</span>: {<span class="str">"type"</span>:<span class="str">"chunk"</span>, <span class="str">"text"</span>:<span class="str">"25% "</span>}
+<span class="key">data</span>: {<span class="str">"type"</span>:<span class="str">"chunk"</span>, <span class="str">"text"</span>:<span class="str">"of "</span>}
+<span class="key">data</span>: {<span class="str">"type"</span>:<span class="str">"chunk"</span>, <span class="str">"text"</span>:<span class="str">"$5000 "</span>}
+
+<span class="cmt">// Completion with usage data</span>
+<span class="key">data</span>: {
+  <span class="str">"type"</span>: <span class="str">"done"</span>,
+  <span class="str">"fullAnswer"</span>: <span class="str">"25% of $5000 is $1250."</span>,
+  <span class="str">"usage"</span>: {
+    <span class="str">"inputTokens"</span>: <span class="num">342</span>,
+    <span class="str">"outputTokens"</span>: <span class="num">18</span>,
+    <span class="str">"totalTokens"</span>: <span class="num">360</span>,
+    <span class="str">"estimatedCost"</span>: <span class="str">"$0.000031"</span>
+  }
+}</pre>
+        </div>
+      </div>
+
+      <!-- CHAT POST -->
+      <div class="endpoint" id="ep-chat">
+        <div class="endpoint-header" onclick="toggleEndpoint('ep-chat')">
+          <span class="endpoint-method post">POST</span>
+          <span class="endpoint-path">/api/chat</span>
+          <span class="endpoint-desc">Standard JSON chat</span>
+          <span class="endpoint-toggle">▼</span>
+        </div>
+        <div class="endpoint-body">
+          <div class="code-label">Example Request</div>
+          <pre><span class="kw">curl</span> -X POST https://api.gosanotary.tech/api/chat \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -H <span class="str">"X-API-Key: your-api-key"</span> \
+  -d <span class="str">'{"message":"who founded OpenAI?","sessionId":"user-123"}'</span></pre>
+
+          <div class="code-label">Response</div>
+          <pre>{
+  <span class="key">"answer"</span>: <span class="str">"OpenAI was founded by Elon Musk, Sam Altman, Greg Brockman..."</span>
+}</pre>
+        </div>
+      </div>
+
+      <!-- DELETE CHAT -->
+      <div class="endpoint" id="ep-chat-delete">
+        <div class="endpoint-header" onclick="toggleEndpoint('ep-chat-delete')">
+          <span class="endpoint-method delete">DELETE</span>
+          <span class="endpoint-path">/api/chat/:sessionId</span>
+          <span class="endpoint-desc">Clear chat history</span>
+          <span class="endpoint-toggle">▼</span>
+        </div>
+        <div class="endpoint-body">
+          <div class="code-label">Example Request</div>
+          <pre><span class="kw">curl</span> -X DELETE https://api.gosanotary.tech/api/chat/user-123 \
+  -H <span class="str">"X-API-Key: your-api-key"</span></pre>
+
+          <div class="code-label">Response</div>
+          <pre>{ <span class="key">"success"</span>: <span class="kw">true</span> }</pre>
+        </div>
+      </div>
+
+      <!-- GET PROFILE -->
+      <div class="endpoint" id="ep-profile">
+        <div class="endpoint-header" onclick="toggleEndpoint('ep-profile')">
+          <span class="endpoint-method get">GET</span>
+          <span class="endpoint-path">/api/profile</span>
+          <span class="endpoint-desc">Get RAG user profile</span>
+          <span class="endpoint-toggle">▼</span>
+        </div>
+        <div class="endpoint-body">
+          <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+            Returns the persistent user profile extracted from past conversations (RAG memory).
+          </p>
+          <div class="code-label">Example Response</div>
+          <pre>{
+  <span class="key">"name"</span>: <span class="str">"Gossaye"</span>,
+  <span class="key">"job"</span>: <span class="str">"AI Agent Engineer"</span>,
+  <span class="key">"location"</span>: <span class="str">"San Diego"</span>,
+  <span class="key">"company"</span>: <span class="str">"Gosa Notary"</span>,
+  <span class="key">"preferences"</span>: [<span class="str">"Python"</span>, <span class="str">"React"</span>],
+  <span class="key">"goals"</span>: [<span class="str">"Build AI SaaS product"</span>],
+  <span class="key">"projects"</span>: [<span class="str">"Lead Research Pipeline"</span>]
+}</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- LEAD PIPELINE -->
+    <div class="section" id="leads-research">
+      <div class="section-title">🎯 Lead Research Pipeline</div>
+      <div class="section-desc">
+        4-agent AI pipeline that researches companies, scores leads, drafts outreach emails,
+        and automatically logs results to Google Sheets.
+      </div>
+
+      <div class="pipeline">
+        <div class="pipeline-step">
+          <div class="step-icon">🔍</div>
+          <div>Researcher</div>
+          <div class="step-name">Agent 1</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+          <div class="step-icon">📊</div>
+          <div>Scorer</div>
+          <div class="step-name">Agent 2</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+          <div class="step-icon">✍️</div>
+          <div>Writer</div>
+          <div class="step-name">Agent 3</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+          <div class="step-icon">💾</div>
+          <div>Logger</div>
+          <div class="step-name">Agent 4</div>
+        </div>
+      </div>
+
+      <div class="endpoint open" id="ep-research">
+        <div class="endpoint-header" onclick="toggleEndpoint('ep-research')">
+          <span class="endpoint-method post">POST</span>
+          <span class="endpoint-path">/api/leads/research</span>
+          <span class="endpoint-desc">Run full 4-agent pipeline</span>
+          <span class="endpoint-toggle">▼</span>
+        </div>
+        <div class="endpoint-body open">
+          <div class="warning-box">
+            ⏱ This endpoint runs 3 sequential Gemini AI calls and 4 web searches.
+            Expected response time: <strong>15–40 seconds</strong> depending on API load.
+          </div>
+
+          <div class="code-label">Request Body</div>
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="param-name">company</span></td>
+                <td><span class="param-type">string</span></td>
+                <td><span class="param-required">required</span></td>
+                <td class="param-desc">Company name to research (max 100 chars)</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="code-label">Example Request</div>
+          <pre><span class="kw">curl</span> -X POST https://api.gosanotary.tech/api/leads/research \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -H <span class="str">"X-API-Key: your-api-key"</span> \
+  -d <span class="str">'{"company":"Stripe"}'</span></pre>
+
+          <div class="code-label">Success Response (200)</div>
+          <pre>{
+  <span class="key">"success"</span>: <span class="kw">true</span>,
+  <span class="key">"report"</span>: {
+    <span class="key">"company"</span>:   <span class="str">"Stripe"</span>,
+    <span class="key">"timestamp"</span>: <span class="str">"2026-04-25T10:30:00.000Z"</span>,
+    <span class="key">"research"</span>:  <span class="str">"Stripe is a financial infrastructure platform..."</span>,
+    <span class="key">"news"</span>:      <span class="str">"Stripe recently launched..."</span>,
+    <span class="key">"tech"</span>:      <span class="str">"Ruby, Go, React, AWS..."</span>,
+    <span class="key">"funding"</span>:   <span class="str">"$6.5B raised, $50B valuation..."</span>,
+    <span class="key">"score"</span>:     <span class="str">"SCORE: 9\nTIER: HOT\nBUDGET_ESTIMATE: $1M-$10M+\n..."</span>,
+    <span class="key">"email"</span>:     <span class="str">"SUBJECT: Re: Stripe's Infrastructure Growth\n\n..."</span>
+  }
+}</pre>
+        </div>
+      </div>
+
+      <!-- LOG SHEET -->
+      <div class="endpoint" id="ep-log">
+        <div class="endpoint-header" onclick="toggleEndpoint('ep-log')">
+          <span class="endpoint-method post">POST</span>
+          <span class="endpoint-path">/api/leads/log-sheet</span>
+          <span class="endpoint-desc">Log lead to Google Sheets</span>
+          <span class="endpoint-toggle">▼</span>
+        </div>
+        <div class="endpoint-body">
+          <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+            Manually log a lead to the connected Google Sheet. Note: <code style="font-family:monospace;color:var(--blue)">/api/leads/research</code>
+            automatically logs to Sheets — this endpoint is for manual logging.
+          </p>
+
+          <div class="code-label">Request Body</div>
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="param-name">company</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td class="param-desc">Company name</td></tr>
+              <tr><td><span class="param-name">score</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td class="param-desc">Lead score (1-10)</td></tr>
+              <tr><td><span class="param-name">tier</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td class="param-desc">HOT, WARM, or COLD</td></tr>
+              <tr><td><span class="param-name">budgetEstimate</span></td><td><span class="param-type">string</span></td><td><span class="param-optional">optional</span></td><td class="param-desc">Budget range estimate</td></tr>
+              <tr><td><span class="param-name">opportunity</span></td><td><span class="param-type">string</span></td><td><span class="param-optional">optional</span></td><td class="param-desc">Opportunity description</td></tr>
+              <tr><td><span class="param-name">emailSubject</span></td><td><span class="param-type">string</span></td><td><span class="param-optional">optional</span></td><td class="param-desc">Outreach email subject</td></tr>
+              <tr><td><span class="param-name">research</span></td><td><span class="param-type">string</span></td><td><span class="param-optional">optional</span></td><td class="param-desc">Research summary</td></tr>
+            </tbody>
+          </table>
+
+          <div class="code-label">Response</div>
+          <pre>{ <span class="key">"success"</span>: <span class="kw">true</span>, <span class="key">"message"</span>: <span class="str">"Stripe logged to Google Sheets"</span> }</pre>
+        </div>
+      </div>
+
+      <!-- SEND EMAIL -->
+      <div class="endpoint" id="ep-email">
+        <div class="endpoint-header" onclick="toggleEndpoint('ep-email')">
+          <span class="endpoint-method post">POST</span>
+          <span class="endpoint-path">/api/leads/send-email</span>
+          <span class="endpoint-desc">Send outreach email via Gmail</span>
+          <span class="endpoint-toggle">▼</span>
+        </div>
+        <div class="endpoint-body">
+          <div class="code-label">Request Body</div>
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="param-name">to</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td class="param-desc">Recipient email address</td></tr>
+              <tr><td><span class="param-name">subject</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td class="param-desc">Email subject line</td></tr>
+              <tr><td><span class="param-name">body</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td class="param-desc">Email body text</td></tr>
+              <tr><td><span class="param-name">company</span></td><td><span class="param-type">string</span></td><td><span class="param-optional">optional</span></td><td class="param-desc">Company name for logging</td></tr>
+            </tbody>
+          </table>
+
+          <div class="code-label">Response</div>
+          <pre>{ <span class="key">"success"</span>: <span class="kw">true</span>, <span class="key">"message"</span>: <span class="str">"Email sent to contact@stripe.com"</span> }</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- NOTIFICATIONS -->
+    <div class="section" id="sms">
+      <div class="section-title">📱 Notifications</div>
+
+      <div class="endpoint" id="ep-sms">
+        <div class="endpoint-header" onclick="toggleEndpoint('ep-sms')">
+          <span class="endpoint-method post">POST</span>
+          <span class="endpoint-path">/api/notify/sms</span>
+          <span class="endpoint-desc">Send SMS via Twilio</span>
+          <span class="endpoint-toggle">▼</span>
+        </div>
+        <div class="endpoint-body">
+          <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+            Sends an SMS notification to the configured phone number (used for notary booking alerts).
+          </p>
+
+          <div class="code-label">Request Body</div>
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="param-name">name</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td class="param-desc">Customer name</td></tr>
+              <tr><td><span class="param-name">phone</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td class="param-desc">Customer phone number</td></tr>
+              <tr><td><span class="param-name">email</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td class="param-desc">Customer email</td></tr>
+              <tr><td><span class="param-name">service</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td class="param-desc">Service requested</td></tr>
+              <tr><td><span class="param-name">message</span></td><td><span class="param-type">string</span></td><td><span class="param-optional">optional</span></td><td class="param-desc">Additional message</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- HEALTH -->
+      <div class="endpoint" id="ep-health">
+        <div class="endpoint-header" onclick="toggleEndpoint('ep-health')">
+          <span class="endpoint-method get">GET</span>
+          <span class="endpoint-path">/health</span>
+          <span class="endpoint-desc">Health check (no auth required)</span>
+          <span class="endpoint-toggle">▼</span>
+        </div>
+        <div class="endpoint-body">
+          <div class="code-label">Response</div>
+          <pre>{ <span class="key">"status"</span>: <span class="str">"ok"</span>, <span class="key">"message"</span>: <span class="str">"Gossaye AI Agent API is running!"</span> }</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ERROR REFERENCE -->
+    <div class="section" id="errors">
+      <div class="section-title">⚠️ Error Reference</div>
+
+      <table class="params-table">
+        <thead>
+          <tr><th>Status</th><th>Code</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="status-401">401</span></td>
+            <td><span class="param-name">API key required</span></td>
+            <td class="param-desc">No X-API-Key header provided</td>
+          </tr>
+          <tr>
+            <td><span class="status-401">401</span></td>
+            <td><span class="param-name">Invalid API key</span></td>
+            <td class="param-desc">Key provided but not valid</td>
+          </tr>
+          <tr>
+            <td><span class="status-400">400</span></td>
+            <td><span class="param-name">Invalid input detected</span></td>
+            <td class="param-desc">Prompt injection attempt blocked</td>
+          </tr>
+          <tr>
+            <td><span class="status-400">400</span></td>
+            <td><span class="param-name">Input too long</span></td>
+            <td class="param-desc">Message exceeds maximum length</td>
+          </tr>
+          <tr>
+            <td><span class="status-429">429</span></td>
+            <td><span class="param-name">Too many requests</span></td>
+            <td class="param-desc">Rate limit exceeded — wait 1 minute</td>
+          </tr>
+          <tr>
+            <td><span class="status-400">500</span></td>
+            <td><span class="param-name">Internal server error</span></td>
+            <td class="param-desc">AI model unavailable or server error</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- FOOTER -->
+    <div style="margin-top:60px;padding-top:24px;border-top:1px solid var(--border);
+                display:flex;justify-content:space-between;align-items:center;
+                font-size:12px;color:var(--muted)">
+      <div>Gossaye AI Agent API • Built with Node.js + Gemini 2.5 Flash</div>
+      <div>
+        <a href="https://agent.gosanotary.tech" style="color:var(--blue);text-decoration:none;margin-right:16px">Live Demo</a>
+        <a href="https://github.com/gosadev99-bit/gemini-two-tools-agent" style="color:var(--blue);text-decoration:none">GitHub</a>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  function toggleEndpoint(id) {
+    const ep = document.getElementById(id);
+    const body = ep.querySelector('.endpoint-body');
+    const isOpen = body.classList.contains('open');
+    body.classList.toggle('open', !isOpen);
+    ep.classList.toggle('open', !isOpen);
+  }
+
+  // Highlight active sidebar link on scroll
+  const sections = document.querySelectorAll('.section, .hero');
+  const links = document.querySelectorAll('.sidebar-link');
+
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 80) current = s.id;
+    });
+    links.forEach(l => {
+      l.classList.toggle('active', l.getAttribute('href') === '#' + current);
+    });
+  });
+</script>
+
+</body>
+</html>

@@ -16,6 +16,12 @@ const fs = require('fs');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const axios = require('axios');
 
+// ── API DOCS ──────────────────────────────────────────────────────────────
+const path = require('path');
+app.get('/docs', (req, res) => {
+  res.sendFile(path.join(__dirname, 'docs.html'));
+});
+
 // ── VALIDATE ENV VARS ──────────────────────────────────────────────────────
 const REQUIRED_ENV = ['GEMINI_API_KEY', 'GITHUB_TOKEN', 'GITHUB_USERNAME', 'GITHUB_REPO'];
 REQUIRED_ENV.forEach(key => {
