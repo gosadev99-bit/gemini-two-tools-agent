@@ -55,7 +55,7 @@ const VALID_API_KEYS = new Set([
 ].filter(Boolean));
 
 function authenticateAPIKey(req, res, next) {
-  if (req.path === '/health') return next();
+  if (req.path === '/health' || req.path === '/docs') return next();
   const apiKey =
     req.headers['x-api-key'] ||
     req.headers['authorization']?.replace('Bearer ', '');
