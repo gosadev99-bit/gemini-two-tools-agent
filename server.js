@@ -798,8 +798,7 @@ setInterval(() => {
   langfuse.flushAsync().catch(() => {});
 }, 10000);
 
-// ── API DOCS ──────────────────────────────────────────────────────────────
-const path = require('path');
+// ── API DOCS ────────────────────────────────────────────────────────────
 app.get('/docs', (req, res) => {
   res.sendFile(path.join(__dirname, 'docs.html'));
 });
