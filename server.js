@@ -13,14 +13,9 @@ const nodemailer = require('nodemailer');
 const twilio = require('twilio');
 const express = require('express');
 const fs = require('fs');
+const path = require('path');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const axios = require('axios');
-
-// ── API DOCS ──────────────────────────────────────────────────────────────
-const path = require('path');
-app.get('/docs', (req, res) => {
-  res.sendFile(path.join(__dirname, 'docs.html'));
-});
 
 // ── VALIDATE ENV VARS ──────────────────────────────────────────────────────
 const REQUIRED_ENV = ['GEMINI_API_KEY', 'GITHUB_TOKEN', 'GITHUB_USERNAME', 'GITHUB_REPO'];
@@ -392,6 +387,10 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Gossaye AI Agent API is running!' });
 });
 
+app.get('/docs', (req, res) => {
+  res.sendFile(path.join(__dirname, 'docs.html'));
+});
+
 // ── MAIN CHAT ENDPOINT ────────────────────────────────────────────────────
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId = 'react-ui' } = req.body;
@@ -623,7 +622,6 @@ Data: ${summary.slice(0,400)}`);
       news, tech, funding, score, email
     };
 
-    // ── LANGFUSE: TRACE LEAD RESEARCH ─────────────────────
     const leadTrace = langfuse.trace({
       name: 'lead-research',
       input: { company },
@@ -643,7 +641,6 @@ Data: ${summary.slice(0,400)}`);
 
     console.log(`✅ Lead research complete: ${company}`);
 
-    // ── AUTO-LOG TO GOOGLE SHEETS ─────────────────────────
     try {
       const scoreMatch  = score.match(/SCORE:\s*(\d+)/);
       const tierMatch   = score.match(/TIER:\s*(\w+)/);
@@ -742,9 +739,7 @@ app.post('/api/leads/log-sheet', async (req, res) => {
       resource: {
         values: [[
           new Date().toLocaleString(),
-          company,
-          score,
-          tier,
+          company, score, tier,
           budgetEstimate || '',
           opportunity || '',
           emailSubject || '',
@@ -779,9 +774,7 @@ app.post('/api/leads/send-email', async (req, res) => {
 
     await transporter.sendMail({
       from: `Gossaye Bireda <${process.env.GMAIL_USER}>`,
-      to,
-      subject,
-      text: body,
+      to, subject, text: body,
     });
 
     console.log(`✅ Email sent to ${to}`);
@@ -797,11 +790,6 @@ app.post('/api/leads/send-email', async (req, res) => {
 setInterval(() => {
   langfuse.flushAsync().catch(() => {});
 }, 10000);
-
-// ── API DOCS ────────────────────────────────────────────────────────────
-app.get('/docs', (req, res) => {
-  res.sendFile(path.join(__dirname, 'docs.html'));
-});
 
 // ── START SERVER ───────────────────────────────────────────────────────────
 app.listen(PORT, () => {
