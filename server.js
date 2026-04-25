@@ -798,6 +798,12 @@ setInterval(() => {
   langfuse.flushAsync().catch(() => {});
 }, 10000);
 
+// ── API DOCS ──────────────────────────────────────────────────────────────
+const path = require('path');
+app.get('/docs', (req, res) => {
+  res.sendFile(path.join(__dirname, 'docs.html'));
+});
+
 // ── START SERVER ───────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🚀 Gossaye AI Agent API running on port ${PORT}`);
