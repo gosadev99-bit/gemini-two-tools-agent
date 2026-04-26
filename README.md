@@ -1,90 +1,141 @@
- # 🤖 Gemini Two-Tools Agent
+# Gossaye AI Agent — Multi-Tool Agent + Lead Research Pipeline
 
-A conversational AI agent built with Google Gemini that intelligently 
-decides which tool to use based on your question.
+A production-grade AI agent system built with Node.js, Express, and Google Gemini 2.5 Flash. Features a streaming chat agent with tool use and a 4-agent lead research pipeline with Google Sheets integration.
 
- Live demo: https://api.gosanotary.tech
+## Live Demo
 
-## 🚀 Features
+- **Chat Agent:** [agent.gosanotary.tech](https://agent.gosanotary.tech)
+- **Lead Pipeline:** [agent.gosanotary.tech/leads](https://agent.gosanotary.tech/leads)
+- **API Docs:** [api.gosanotary.tech/docs](https://api.gosanotary.tech/docs)
 
-- 🧮 **Calculator tool** — handles any math or number problems
-- 🔍 **Web Search tool** — looks up facts, people, and current info
-- 🧠 **Memory** — remembers your conversation history
-- 💬 **Telegram interface** — chat with the agent on your phone
+---
 
-## 🛠️ Tech Stack
+## Features
 
-- Node.js
-- Google Gemini API (gemini-2.0-flash)
-- node-telegram-bot-api
-- DuckDuckGo Instant Answer API
-- dotenv
+### AI Chat Agent
+- Streaming responses via Server-Sent Events (SSE)
+- 3 integrated tools: Web Search, Calculator, GitHub PR Manager
+- Persistent conversation memory across sessions
+- RAG user profile extracted from conversation history
+- Real-time token cost tracking
 
-## ⚙️ Setup
+### Lead Research Pipeline (4-Agent System)
+| Agent | Role |
+|-------|------|
+| 🔍 Researcher | Web search across 4 data sources |
+| 📊 Scorer | Scores lead 1-10 with HOT/WARM/COLD tier |
+| ✍️ Writer | Drafts personalized cold outreach email |
+| 💾 Logger | Auto-logs to Google Sheets |
 
-### 1. Clone the repo
-git clone https://github.com/gosadev99-bit/gemini-two-tools-agent.git
+### Sales Dashboard
+- KPI cards with animated counters
+- Donut chart — lead distribution
+- Score histogram
+- Kanban board (HOT / WARM / COLD columns)
+- CSV export
 
+---
 
-### 2. Install dependencies
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| AI Model | Google Gemini 2.5 Flash |
+| Backend | Node.js, Express |
+| Frontend | React 18 |
+| Monitoring | Langfuse |
+| Notifications | Twilio SMS |
+| Email | Nodemailer + Gmail SMTP |
+| Sheets | Google Sheets API v4 |
+| Deployment | Ubuntu 24.04 VPS, Nginx, PM2 |
+| Security | API key auth, rate limiting, prompt injection defense |
+
+---
+
+## API
+
+All endpoints require `X-API-Key` header. Full documentation at [api.gosanotary.tech/docs](https://api.gosanotary.tech/docs).
+
+```bash
+# Chat
+curl -X POST https://api.gosanotary.tech/api/chat/stream \
+  -H "X-API-Key: your-key" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"what is 25% of $5000?","sessionId":"demo"}'
+
+# Lead Research
+curl -X POST https://api.gosanotary.tech/api/leads/research \
+  -H "X-API-Key: your-key" \
+  -H "Content-Type: application/json" \
+  -d '{"company":"Stripe"}'
+```
+
+---
+
+## Security
+
+- API key authentication on all endpoints
+- Prompt injection detection (13 regex patterns)
+- Input validation and length limits
+- Rate limiting: 20 req/min chat, 10 req/min leads
+- Request size limit: 10kb
+- Output sanitization (redacts API keys from responses)
+
+---
+
+## Architecture
+
+```
+React UI (gemini-chat-ui)
+    ↓ HTTPS + X-API-Key
+Express API (api.gosanotary.tech:3001)
+    ↓
+Gemini 2.5 Flash
+    ├── search_web → DuckDuckGo API
+    ├── calculate  → Safe eval
+    └── github_pr  → GitHub REST API
+    ↓
+Langfuse (monitoring + cost tracking)
+```
+
+---
+
+## Setup
+
+```bash
+git clone https://github.com/gosadev99-bit/gemini-two-tools-agent
+cd gemini-two-tools-agent
 npm install
-
-### 3. Create your .env file
-cp .env.example .env
-
-Fill in your keys:
-
-GEMINI_API_KEY=your_gemini_api_key
-
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-
-### 4. Run the agent (terminal only)
-node index.js
-
-### 5. Run the Telegram bot
-node bot.js
-
-## 🧠 How It Works
-```
-User message
-
- ↓
-Gemini reads the question
-
- ↓
-Gemini decides: calculator or search?
-
- ↓
-Tool runs locally on your machine
-
- ↓
-Result sent back to Gemini
-
- ↓
-Final answer delivered
+cp .env.example .env  # fill in your keys
+node server.js
 ```
 
-## 💡 Example Conversations
+### Required Environment Variables
 
-**Math:**
-> You: What is 18% tip on $120?
-> 
-> Bot: An 18% tip on $120 is $21.60.
+```
+GEMINI_API_KEY=
+LANGFUSE_SECRET_KEY=
+LANGFUSE_PUBLIC_KEY=
+GOOGLE_SHEET_ID=
+GMAIL_USER=
+GMAIL_APP_PASSWORD=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_PHONE_NUMBER=
+MY_PHONE_NUMBER=
+API_KEY_MASTER=
+API_KEY_CLIENT1=
+API_KEY_REACT_UI=
+GITHUB_TOKEN=
+GITHUB_USERNAME=
+GITHUB_REPO=
+```
 
-**Search:**
-> You: Who founded Google?
-> 
-> Bot: Larry Page and Sergey Brin founded Google.
+---
 
-**Memory:**
-> You: Add that tip to $200, what is the total?
-> 
-> Bot: The total is $221.60.
+## Built By
 
-## Deployment
+**Gossaye Bireda** — Front-End React Developer transitioning to AI Agent Engineer.
 
-Deploy to VPS (Ubuntu + PM2 + Nginx)
-
-## 👨‍💻 Author
-
-Gossaye Bireda — Full stack Developer/AI Agent Engineer. 
+- Portfolio: [gosanotary.tech/portfolio](https://gosanotary.tech/portfolio)
+- GitHub: [@gosadev99-bit](https://github.com/gosadev99-bit)
